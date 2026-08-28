@@ -1,0 +1,3085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORDERFLOW — Signal Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root, [data-theme="dark"]{
+    --bg: #0C0F12; --panel: #14181D; --panel-2: #191E24; --border: #262C33;
+    --text: #E7E5DF; --muted: #868D96; --muted-2: #575E67;
+    --brass: #C9A227; --brass-dim: #8A711D;
+    --buy: #3FB68C; --buy-dim: #1F3D34;
+    --sell: #E2574C; --sell-dim: #402522;
+    --wait: #6B7280; --wait-dim: #2A2D31;
+    --aplus: #C9A227; --aplus-dim: #3D3116;
+    --agrade: #6FA8DC; --agrade-dim: #1E2C3D;
+    --bgrade: #8B9199; --bgrade-dim: #262A2E;
+  }
+  [data-theme="light"]{
+    --bg: #F5F3EF; --panel: #FFFFFF; --panel-2: #F0EDE7; --border: #DCD7CC;
+    --text: #1C1C1A; --muted: #6B6A66; --muted-2: #9A968C;
+    --brass: #A9791C; --brass-dim: #D9C48A;
+    --buy: #1F8F6A; --buy-dim: #DCF1E8;
+    --sell: #C23B30; --sell-dim: #FBE4E1;
+    --wait: #8B8F94; --wait-dim: #EBEAE7;
+    --aplus: #A9791C; --aplus-dim: #F3E6C0;
+    --agrade: #2E6BA8; --agrade-dim: #DDEAF6;
+    --bgrade: #6B6A66; --bgrade-dim: #EBEAE7;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; min-height: 100vh; padding-bottom: 60px; transition: background .2s, color .2s;}
+  .mono{ font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  header{ border-bottom: 1px solid var(--border); padding: 14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap: wrap; gap: 12px; position: sticky; top:0; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); z-index: 10;}
+  .brand{ display:flex; align-items:baseline; gap:10px;}
+  .brand .mark{ color: var(--brass); font-weight:700; letter-spacing: 0.04em;}
+  .brand .tag{ font-size:11px; color:var(--muted-2); letter-spacing: 0.12em; text-transform: uppercase;}
+  h1{ font-size: 20px; letter-spacing: 0.02em; }
+
+  .header-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .icon-btn{ background:var(--panel-2); border:1px solid var(--border); color:var(--muted); width:34px; height:34px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px;}
+  .icon-btn:hover{ color:var(--text); border-color:var(--muted-2); }
+
+  .tabs{ display:flex; gap:4px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:3px;}
+  .tabs button{ background:transparent; border:none; color:var(--muted); font-family:inherit; font-size:13px; padding:7px 14px; border-radius:6px; cursor:pointer; letter-spacing:0.03em;}
+  .tabs button.active{ background: var(--panel-2); color: var(--brass); }
+
+  .conn-badge{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; padding:3px 9px; border-radius:20px; letter-spacing:0.03em; text-transform:uppercase; font-weight:600;}
+  .conn-badge .dot{ width:6px; height:6px; border-radius:50%; }
+  .conn-badge.connected{ background:var(--buy-dim); color:var(--buy);} .conn-badge.connected .dot{ background:var(--buy); }
+  .conn-badge.connecting{ background:var(--aplus-dim); color:var(--brass);} .conn-badge.connecting .dot{ background:var(--brass); animation:pulse 1s infinite;}
+  .conn-badge.disconnected{ background:var(--wait-dim); color:var(--muted);} .conn-badge.disconnected .dot{ background:var(--muted); }
+  .conn-badge.error{ background:var(--sell-dim); color:var(--sell);} .conn-badge.error .dot{ background:var(--sell); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  main{ max-width: 1220px; margin: 0 auto; padding: 24px; display:flex; flex-direction:column; gap:20px;}
+  .row{ display:grid; grid-template-columns: 1.4fr 1fr; gap:20px; }
+  @media (max-width: 900px){ .row{ grid-template-columns: 1fr; } }
+  .row3{ display:grid; grid-template-columns: repeat(3,1fr); gap:20px; }
+  @media (max-width: 1100px){ .row3{ grid-template-columns: 1fr; } }
+
+  .panel{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;}
+  .panel h2{ font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 14px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;}
+  .panel h2 .hint{ font-size: 10px; text-transform:none; letter-spacing:0.02em; color: var(--muted-2); }
+
+  select, input, textarea, button.action{ background: var(--panel-2); border:1px solid var(--border); color: var(--text); font-family: inherit; font-size: 13px; padding: 9px 11px; border-radius: 6px; outline:none;}
+  select:focus, input:focus, textarea:focus{ border-color: var(--brass-dim); }
+  label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:5px;}
+  .field{ margin-bottom: 12px; }
+  .field-row{ display:flex; gap:10px; flex-wrap:wrap;}
+  .field-row > div{ flex:1; min-width:120px;}
+
+  button.action{ cursor:pointer; transition: all .15s ease; border-color: var(--brass-dim); }
+  button.action:hover{ background: var(--brass-dim); color:#12161A; }
+  button.action.primary{ background: var(--brass); color:#14181D; font-weight:600; border:none; }
+  button.action.primary:hover{ background:#DDB640; }
+  button.ghost{ background:transparent; border:1px solid var(--border); color:var(--muted); }
+  button.ghost:hover{ border-color: var(--muted-2); color: var(--text); }
+  button.small{ padding:5px 10px; font-size:11.5px; }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  .switch{ position:relative; display:inline-block; width:42px; height:24px; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .switch-track{ position:absolute; inset:0; background:var(--wait-dim); border-radius:20px; cursor:pointer; transition:.2s; border:1px solid var(--border);}
+  .switch-track:before{ content:""; position:absolute; width:16px; height:16px; left:3px; top:3px; background:var(--muted); border-radius:50%; transition:.2s;}
+  .switch input:checked + .switch-track{ background:var(--buy-dim); }
+  .switch input:checked + .switch-track:before{ transform:translateX(18px); background:var(--buy);}
+
+  .pair-summary{ display:flex; align-items:baseline; gap:14px; margin-bottom:10px; flex-wrap:wrap;}
+  .pair-summary .price{ font-size: 26px; font-weight: 600; }
+  .pair-summary .delta{ font-size: 13px; }
+  .up{ color: var(--buy); } .down{ color: var(--sell); }
+
+  .signal-card{ border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:10px; border-left-width: 3px; background: var(--panel-2);}
+  .signal-card.buy{ border-left-color: var(--buy); } .signal-card.sell{ border-left-color: var(--sell); }
+  .signal-card.wait{ border-left-color: var(--wait); opacity: 0.72;}
+  .signal-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;}
+  .signal-dir{ font-weight:700; letter-spacing:0.05em; font-size:14px; }
+  .signal-dir.buy{ color: var(--buy);} .signal-dir.sell{ color:var(--sell);} .signal-dir.wait{ color:var(--wait);}
+  .strategy-name{ font-size:11px; color:var(--muted); text-transform: uppercase; letter-spacing:0.05em;}
+  .confidence{ font-size:11px; color: var(--muted); display:flex; align-items:center; gap:6px;}
+  .confidence-bar{ width:60px; height:4px; background:var(--wait-dim); border-radius:2px; display:inline-block; position:relative;}
+  .confidence-fill{ height:100%; border-radius:2px; background: var(--brass); }
+  .reason{ font-size: 12.5px; color: var(--muted); line-height:1.5; margin-bottom: 10px;}
+  .levels{ display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; font-size:12px; }
+  .level{ background: var(--bg); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
+  .level .k{ color:var(--muted-2); font-size:10px; text-transform:uppercase; letter-spacing:0.04em; }
+  .level .v{ font-weight:600; margin-top:2px; }
+
+  .grade-badge{ display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; padding:3px 9px; border-radius:6px; letter-spacing:0.02em;}
+  .grade-badge.Aplus{ background:var(--aplus-dim); color:var(--aplus); }
+  .grade-badge.A{ background:var(--agrade-dim); color:var(--agrade); }
+  .grade-badge.B{ background:var(--bgrade-dim); color:var(--bgrade); }
+
+  .score-grid{ display:grid; grid-template-columns: repeat(4,1fr); gap:8px; margin-top:10px;}
+  .score{ background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; text-align:center;}
+  .score .k{ font-size:9.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.04em;}
+  .score .v{ font-size:15px; font-weight:700; margin-top:3px;}
+
+  .empty{ color: var(--muted-2); font-size:13px; padding: 18px 4px; text-align:center; }
+
+  .hero{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .hero-badge{ font-size: 24px; font-weight:700; letter-spacing:0.04em; padding: 12px 20px; border-radius:10px; min-width: 120px; text-align:center;}
+  .hero-badge.buy{ background: var(--buy-dim); color: var(--buy); } .hero-badge.sell{ background: var(--sell-dim); color: var(--sell);} .hero-badge.wait{ background: var(--wait-dim); color: var(--muted);}
+  .hero-detail{ flex:1; min-width:220px; }
+  .hero-detail .strat{ font-size:11px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .hero-detail .reason{ font-size: 13.5px; color: var(--text); margin-bottom:0; }
+  .hero-levels{ display:flex; gap:16px; flex-wrap:wrap; }
+  .hero-levels .lvl{ text-align:center; }
+  .hero-levels .lvl .k{ font-size:10px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.05em;}
+  .hero-levels .lvl .v{ font-size:16px; font-weight:600; margin-top:2px;}
+
+  table{ width:100%; border-collapse: collapse; font-size:12.5px;}
+  th{ text-align:left; color:var(--muted-2); font-weight:500; text-transform:uppercase; letter-spacing:0.05em; font-size:10.5px; padding: 6px 8px; border-bottom:1px solid var(--border);}
+  td{ padding: 8px; border-bottom: 1px solid var(--panel-2); }
+  tr:last-child td{ border-bottom:none; }
+  .tag-pill{ display:inline-block; padding:2px 8px; border-radius: 20px; font-size:10.5px; font-weight:600; letter-spacing:0.03em;}
+  .tag-pill.win{ background: var(--buy-dim); color: var(--buy);} .tag-pill.loss{ background: var(--sell-dim); color: var(--sell);} .tag-pill.open{ background: var(--wait-dim); color: var(--muted);}
+
+  .stat-grid{ display:grid; grid-template-columns: repeat(4,1fr); gap:10px; margin-bottom:16px;}
+  .stat{ background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  .stat .k{ font-size:10.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.05em;}
+  .stat .v{ font-size: 19px; font-weight:600; margin-top:4px;}
+
+  .journal-form{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:flex-end; }
+  .journal-form .field{ margin-bottom:0; min-width:110px; flex:1;}
+
+  .table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+  @media (max-width: 560px){
+    main{ padding:14px; gap:16px; }
+    .panel{ padding:14px 14px; }
+    header{ padding:12px 14px; }
+    h1{ font-size:17px; }
+    .hero{ gap:12px; }
+    .hero-badge{ font-size:19px; padding:10px 16px; min-width:96px; }
+    .hero-detail .reason{ font-size:12.5px; }
+    .score-grid, .stat-grid{ grid-template-columns: repeat(2,1fr); }
+    .levels{ grid-template-columns: repeat(2,1fr); }
+    .pair-summary .price{ font-size:21px; }
+    .chart-wrap{ height:260px; }
+    .journal-form{ flex-direction:column; align-items:stretch; }
+    .journal-form .field{ min-width:0; }
+  }
+
+  .strategy-toggle-list{ display:flex; flex-direction:column; gap:8px; }
+  .strategy-toggle{ display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-size:12.5px;}
+  .strategy-toggle .name{ font-weight:500; } .strategy-toggle .src{ font-size:10.5px; color:var(--muted-2); display:block; margin-top:2px;}
+
+  .settings-drawer{ display:none; }
+  .settings-drawer.open{ display:block; }
+
+  .banner{ padding:10px 24px; font-size:13px; text-align:center; }
+  .banner.error{ background:var(--sell-dim); color:var(--sell); }
+  .banner.info{ background:var(--agrade-dim); color:var(--agrade); }
+  .banner.warn{ background:var(--aplus-dim); color:var(--brass); }
+
+  .chart-wrap{ position:relative; width:100%; height:340px; }
+  #priceChart{ width:100%; height:100%; display:block; border-radius:8px; }
+  .chart-legend{ display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:11px; color:var(--muted); }
+  .chart-legend .item{ display:flex; align-items:center; gap:5px; }
+  .chart-legend .swatch{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+  .overlay-chip{
+    display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px;
+    font-size:11px; cursor:pointer; border:1px solid var(--border); background:var(--panel-2); color:var(--muted);
+    transition: all .12s ease; user-select:none;
+  }
+  .overlay-chip .dot{ width:8px; height:8px; border-radius:50%; }
+  .overlay-chip.off{ opacity:0.4; }
+  .overlay-chip.off .dot{ opacity:0.5; }
+
+  footer{ text-align:center; color: var(--muted-2); font-size: 11.5px; padding: 30px 24px 10px; line-height:1.7; max-width:900px; margin:0 auto;}
+  footer a{ color: var(--brass-dim); }
+
+  ::-webkit-scrollbar{ width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius:4px;}
+</style>
+</head>
+<body data-theme="dark">
+
+<header>
+  <div class="brand">
+    <h1><span class="mark">ORDER</span>FLOW</h1>
+    <span class="tag">Signal Desk</span>
+  </div>
+  <div class="header-right">
+    <div class="tabs" id="marketTabs"></div>
+    <span class="conn-badge disconnected" id="connBadge"><span class="dot"></span><span id="connText">—</span></span>
+    <button class="icon-btn" id="themeToggle" title="Toggle dark/light">◐</button>
+    <button class="icon-btn" id="settingsToggle" title="Settings">⚙</button>
+  </div>
+</header>
+
+<div id="errorBanner" class="banner error" style="display:none;"></div>
+<div id="infoBanner" class="banner info" style="display:none;"></div>
+
+<main>
+
+  <div class="panel settings-drawer" id="settingsDrawer">
+    <h2>Settings <span class="hint">Everything here stays in your browser only</span></h2>
+    <div class="field" style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border);">
+      <label>Backend URL (optional — connects this to a deployed ORDERFLOW backend)</label>
+      <div class="field-row">
+        <input type="text" id="backendUrlInput" placeholder="https://your-backend.example.com" style="flex:2;">
+        <button class="ghost action small" id="backendConnectBtn" style="flex:0 0 auto;">Connect</button>
+      </div>
+      <div id="backendStatusLine" style="font-size:11.5px; color:var(--muted-2); margin-top:6px;">
+        Not connected — running fully self-sufficient in this browser (still real data, just computed here instead of on a server).
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="field">
+          <label>Minimum reward:risk to show as a signal</label>
+          <select id="minRrSelect">
+            <option value="1">1 : 1</option>
+            <option value="1.5">1.5 : 1</option>
+            <option value="2" selected>2 : 1</option>
+            <option value="2.5">2.5 : 1</option>
+            <option value="3">3 : 1</option>
+            <option value="4">4 : 1</option>
+            <option value="5">5 : 1</option>
+            <option value="6">6 : 1 (strict)</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="number" id="customRr" placeholder="e.g. 3.5" style="display:none; margin-top:8px; width:100%;">
+        </div>
+      </div>
+      <div>
+        <div class="field">
+          <label>Telegram alerts (optional — bot token + chat id)</label>
+          <div class="field-row">
+            <input type="text" id="tgToken" placeholder="Bot token">
+            <input type="text" id="tgChatId" placeholder="Chat ID">
+          </div>
+        </div>
+        <div class="field">
+          <label>Discord alerts (optional — webhook URL)</label>
+          <input type="text" id="discordWebhook" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <div class="field-row" style="align-items:center;">
+          <label style="margin:0;">Browser notifications</label>
+          <label class="switch"><input type="checkbox" id="browserNotifToggle"><span class="switch-track"></span></label>
+          <label style="margin:0;">Sound alerts</label>
+          <label class="switch"><input type="checkbox" id="soundToggle" checked><span class="switch-track"></span></label>
+        </div>
+        <div style="font-size:11px; color:var(--muted-2); margin-top:6px;">Alerts only fire for A+ graded signals.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pairView">
+  <div class="panel">
+    <div class="pair-summary">
+      <select id="pairSelect" style="font-size:16px; font-weight:600; background:transparent; border:none; padding:0;"></select>
+      <span class="price mono" id="lastPrice">—</span>
+      <span class="delta mono" id="lastDelta">—</span>
+      <span style="margin-left:auto; font-size:11px; color:var(--muted-2);">Bid/Ask spread: <span class="mono" id="spreadDisplay">—</span></span>
+    </div>
+  </div>
+
+  <div class="panel" id="heroPanel">
+    <div id="heroSignal"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Live Chart <span class="hint" id="chartMeta"></span></h2>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+      <div class="tabs" id="chartTfTabs"></div>
+      <div style="display:flex; gap:6px;">
+        <button class="ghost action small" id="chartScrollOlderBtn" title="See older candles">◀ Older</button>
+        <button class="ghost action small" id="chartScrollNewerBtn" title="Scroll toward now">Newer ▶</button>
+        <button class="ghost action small" id="chartResetBtn" title="Jump back to the live edge">Live edge</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="priceChart"></canvas>
+    </div>
+    <div id="chartOverlayChips" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;"></div>
+    <div class="chart-legend">
+      <span class="item"><span class="swatch" style="background:var(--buy);"></span>Bullish candle</span>
+      <span class="item"><span class="swatch" style="background:var(--sell);"></span>Bearish candle</span>
+      <span class="item">Solid lines = live triggered signal · dotted "~" lines = possible entry (pending) · tap a chip above to show/hide a strategy</span>
+      <span class="item" style="margin-left:auto; color:var(--muted-2);">Drag the chart to pan · scroll wheel to zoom</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <h2>All Strategy Checks <span class="hint" id="signalMeta"></span></h2>
+      <div id="signalsList"><div class="empty">Select a pair to run the 10-strategy engine.</div></div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="panel">
+        <h2>Active Strategies</h2>
+        <div class="strategy-toggle-list" id="strategyToggleList"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Position Size Calculator</h2>
+        <div class="field">
+          <label>Account balance</label>
+          <input type="number" id="riskBalance" value="10000" class="mono" style="width:100%;">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Risk % per trade</label>
+            <input type="number" id="riskPct" value="2" step="0.1" class="mono" style="width:100%;">
+          </div>
+          <div class="field">
+            <label>Stop distance (pips)</label>
+            <input type="number" id="riskPips" value="50" class="mono" style="width:100%;">
+          </div>
+        </div>
+        <button class="action" style="width:100%; margin-top:4px;" id="calcBtn">Calculate</button>
+        <div id="riskResult" style="margin-top:14px; font-size:13px; color:var(--muted);"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Pending Setups <span class="hint">Zones identified but not triggered yet — entry/stop already known</span></h2>
+    <div id="pendingSetupsList"><div class="empty">No pending setups right now.</div></div>
+  </div>
+  </div>
+
+  <div id="scannerView" style="display:none;">
+    <div class="panel">
+      <h2>Market Scanner <span class="hint" id="scannerMeta">Runs the full engine across every pair at once</span></h2>
+      <div class="field" style="max-width:220px;">
+        <label>Market to scan</label>
+        <select id="scannerMarketSelect">
+          <option value="crypto">Crypto</option>
+          <option value="synthetic">Synthetic</option>
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+        <button class="action primary" id="scanAllBtn">Scan all pairs</button>
+        <span id="scannerStatus" style="font-size:12px; color:var(--muted-2);"></span>
+      </div>
+      <div class="field-row" style="margin-bottom:14px;">
+        <div class="field">
+          <label>Sort by</label>
+          <select id="scannerSortSelect">
+            <option value="grade">Grade (best first)</option>
+            <option value="confidence">Confidence</option>
+            <option value="rr">Reward:Risk</option>
+            <option value="pair">Pair name (A–Z)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Direction</label>
+          <select id="scannerDirFilter">
+            <option value="all">All</option>
+            <option value="BUY">Buy only</option>
+            <option value="SELL">Sell only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Minimum grade</label>
+          <select id="scannerGradeFilter">
+            <option value="all">Any grade</option>
+            <option value="A">A or better</option>
+            <option value="Aplus">A+ only</option>
+          </select>
+        </div>
+        <div class="field" style="display:flex; align-items:flex-end; padding-bottom:9px;">
+          <label style="display:flex; align-items:center; gap:8px; margin:0; text-transform:none; letter-spacing:0; font-size:12.5px; color:var(--text);">
+            <input type="checkbox" id="scannerHideWait" style="width:auto;"> Hide pairs with no live signal
+          </label>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="scannerTable" style="display:none;">
+          <thead><tr><th>Pair</th><th>Signal</th><th>Grade</th><th>Confidence</th><th>R:R</th><th></th></tr></thead>
+          <tbody id="scannerBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="scannerEmpty">Tap "Scan all pairs" to check every pair in this market at once instead of clicking through them one by one.</div>
+      <div class="empty" id="scannerNoMatch" style="display:none;">No pairs match your current filters. Try widening them.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Live Trade Monitor <span class="hint">Open journal positions, marked to the current price</span></h2>
+    <div id="liveMonitorList"><div class="empty">No open trades. Log one from the journal below.</div></div>
+  </div>
+
+  <div class="panel" id="autoTradeBackendPanel" style="display:none;">
+    <h2>Auto Trading — Live Backend Control <span class="hint">Real controls, since a backend is connected</span></h2>
+    <div class="stat-grid" id="autoTradeBackendStats"></div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+      <button class="action primary" id="autoTradeEnableBtn">Enable auto-trading</button>
+      <button class="ghost action" id="autoTradeDisableBtn">Disable</button>
+      <button class="ghost action" id="killSwitchBtn" style="border-color:var(--sell); color:var(--sell);">Engage kill switch</button>
+      <button class="ghost action" id="killSwitchReleaseBtn">Release kill switch</button>
+      <button class="ghost action" id="closeAllBtn" style="border-color:var(--sell); color:var(--sell);">Close all positions</button>
+    </div>
+    <div id="autoTradeBackendNote" style="font-size:11.5px; color:var(--muted-2); margin-top:10px;"></div>
+  </div>
+
+  <div class="panel" id="autoTradeConfigPanel">
+    <h2>Auto Trading <span class="hint">Configuration only — see note below</span></h2>
+    <div class="field-row" style="align-items:center; margin-bottom:16px;">
+      <label style="margin:0;">Master switch</label>
+      <label class="switch"><input type="checkbox" id="autoTradeMaster"><span class="switch-track"></span></label>
+      <span id="autoTradeStatus" style="font-size:12.5px; color:var(--muted);">OFF — signal mode only</span>
+    </div>
+    <div class="row">
+      <div>
+        <div class="field">
+          <label>Broker</label>
+          <select id="brokerSelect">
+            <option>Weltrade (MT4)</option>
+            <option>Weltrade (MT5)</option>
+            <option>MetaTrader 5 (generic)</option>
+            <option>MetaTrader 4 (generic)</option>
+            <option>Deriv (via Deriv API — token-based)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Server</label>
+          <input type="text" id="brokerServer" placeholder="e.g. Weltrade-Live or Weltrade-Demo">
+        </div>
+        <div class="field">
+          <label>Account login / user ID</label>
+          <input type="text" id="brokerLogin" placeholder="Your MT4/MT5 account number">
+        </div>
+        <div class="field">
+          <label>MetaApi account token <span style="text-transform:none; letter-spacing:0;">(not your broker password)</span></label>
+          <input type="password" id="brokerToken" placeholder="Generated in your MetaApi.cloud console">
+        </div>
+        <button class="action" id="brokerConnectBtn">Connect</button>
+        <span id="brokerConnStatus" style="margin-left:10px; font-size:12px; color:var(--muted-2);"></span>
+      </div>
+      <div>
+        <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">
+          <div class="stat"><div class="k">Balance</div><div class="v">—</div></div>
+          <div class="stat"><div class="k">Equity</div><div class="v">—</div></div>
+          <div class="stat"><div class="k">Margin</div><div class="v">—</div></div>
+          <div class="stat"><div class="k">Free margin</div><div class="v">—</div></div>
+        </div>
+        <div style="font-size:12px; color:var(--muted); line-height:1.6; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px;">
+          <strong style="color:var(--text);">Why this isn't live yet:</strong> real trade execution needs a backend service running continuously and holding your MetaApi token securely server-side — a browser tab can't do that safely. Connect a deployed backend in Settings (⚙) above to get real controls instead of this configuration-only panel. This panel is the real config surface for the backend's own .env file, not something this browser can act on directly.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Trading Journal <span class="hint">Persisted to this artifact's storage</span></h2>
+    <div class="stat-grid" id="journalStats"></div>
+
+    <div class="journal-form">
+      <div class="field"><label>Direction</label><select id="jDirection"><option>BUY</option><option>SELL</option></select></div>
+      <div class="field"><label>Entry</label><input type="number" step="any" id="jEntry" class="mono"></div>
+      <div class="field"><label>Stop</label><input type="number" step="any" id="jStop" class="mono"></div>
+      <div class="field"><label>Target</label><input type="number" step="any" id="jTarget" class="mono"></div>
+      <div class="field"><label>Strategy</label><input type="text" id="jStrategy" placeholder="order_block_rto"></div>
+      <div class="field"><label>Notes</label><input type="text" id="jNotes" placeholder="optional"></div>
+      <button class="action" id="addJournalBtn">Log trade</button>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button class="ghost action small" id="exportCsvBtn">Export CSV</button>
+      <button class="ghost action small" id="exportXlsxBtn">Export Excel (.xlsx)</button>
+    </div>
+
+    <div class="table-scroll">
+      <table id="journalTable">
+        <thead><tr><th>Opened</th><th>Pair</th><th>Dir</th><th>Strategy</th><th>Entry</th><th>Stop</th><th>R</th><th>Duration</th><th>Status</th><th></th></tr></thead>
+        <tbody id="journalBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="journalEmpty" style="display:none;">No trades logged yet.</div>
+  </div>
+
+</main>
+
+<footer id="footerNotes"></footer>
+<script>
+// ============================================================================
+// DATA MODEL & CONNECTION STATUS
+// ============================================================================
+const MARKETS = {
+  crypto:    { label: "Crypto",    pairs: ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT"] },
+  synthetic: { label: "Synthetic", pairs: [] }, // populated live from Deriv's active_symbols -- see connectDeriv()
+};
+// Forex and Gold were removed here on request -- they required your own
+// Twelve Data API key to show real data, and rather than leave a
+// key-gated "no data" state in the app, they're gone entirely. Crypto and
+// Synthetic are the two markets with genuine key-less real-time feeds.
+// A SyntX market (Weltrade's own proprietary instruments: FX Vol, SFX Vol,
+// PainX, GainX, FlipX, FiboX) was removed here on request -- confirmed via
+// Weltrade's own documentation that these have no public API and exist only
+// on Weltrade's MT5 servers, so it could never show real data from a
+// browser. Re-add it once a real backend with an MT5 bridge exists to serve
+// it for real, rather than as a permanently-empty tab.
+const TIMEFRAMES = ["D1","H4","H1","M15","M5"];
+
+let state = {
+  market: "crypto", pair: "BTCUSDT",
+  candles: {}, signals: [], minRR: 2,
+  theme: "dark",
+  connection: { crypto:"disconnected", synthetic:"disconnected" },
+  enabledStrategies: {}, // populated in strategy engine section
+  isRealData: false,
+  currentHeroSignal: null,
+  trackedPrices: {}, // "market:pair" -> last known price, for open trades on pairs you're not currently viewing
+  chartTimeframe: "H1", chartOffset: 0, chartVisibleCount: 80,
+  backtestResults: {},
+  chartOverlayEnabled: {}, // strategy name -> bool, which ones draw their levels on the chart
+  view: "pair", // "pair" | "scanner" -- which top-level section is shown
+  scannerMarket: "crypto", // independent of state.market -- which market the scanner checks
+  scannerSortBy: "grade", scannerDirFilter: "all", scannerGradeFilter: "all", scannerHideWait: false,
+  scannerResults: {}, // pair -> {grade, direction, confidence, rr, backtestLabel} or null while loading
+  scannerRunning: false,
+  scannerLastRun: null,
+  backendUrl: "", backendConnected: false, backendStatus: null,
+};
+const trackedPairs = new Set(); // "market:pair" strings with an open journal trade
+
+function setConnectionStatus(market, status){
+  state.connection[market] = status;
+  if (market === state.market) updateConnBadge();
+}
+function updateConnBadge(){
+  const badge = document.getElementById("connBadge");
+  const text = document.getElementById("connText");
+  const status = state.connection[state.market] || "disconnected";
+  badge.className = "conn-badge " + status;
+  const labels = { connected:"Connected", connecting:"Connecting", disconnected:"No data", error:"Error" };
+  text.textContent = labels[status] || status;
+}
+
+// ============================================================================
+// BACKEND CLIENT -- when a backend URL is set and reachable, this tool
+// becomes a live dashboard for that backend's continuous scanning instead
+// of re-computing everything client-side. Falls back to the existing
+// fully-self-sufficient client-side mode whenever no backend is connected
+// or a backend call fails -- this is a hybrid, not a hard dependency.
+// ============================================================================
+async function checkBackendHealth(url){
+  try{
+    const res = await fetch(`${url.replace(/\/$/,'')}/health`, { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(err){
+    console.error("Backend health check failed:", err);
+    return null;
+  }
+}
+
+function backendSignalToLocal(s){
+  // Maps the backend's snake_case SignalOut shape onto this tool's existing
+  // camelCase signal object shape, so every render function that already
+  // works with client-computed signals works unchanged with backend ones.
+  return {
+    strategy: s.strategy, direction: s.direction, confidence: s.confidence,
+    grade: s.grade, gradeLabel: s.grade_label, entry: s.entry, stop: s.stop,
+    tp1: s.tp1, tp2: s.tp2, tp3: s.tp3, rr: s.rr, reason: s.reason,
+    isPending: s.is_pending, pendingDirection: s.pending_direction, isError: s.is_error,
+    confluenceScore: s.confluence_score, probabilityScore: s.probability_score, riskScore: s.risk_score,
+    confirmations: [], // the backend doesn't currently serialize per-confirmation detail
+  };
+}
+
+async function fetchBackendSignals(market, pair){
+  const url = `${state.backendUrl.replace(/\/$/,'')}/signals/${market}/${encodeURIComponent(pair)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+  const data = await res.json();
+  const backtestResults = {};
+  Object.entries(data.backtests || {}).forEach(([strategy, bt]) => {
+    if (!bt) { backtestResults[strategy] = null; return; }
+    backtestResults[strategy] = { total: bt.total, wins: bt.wins, losses: bt.losses, winRate: bt.win_rate, avgR: bt.avg_r };
+  });
+  return { signals: data.signals.map(backendSignalToLocal), backtestResults };
+}
+
+async function fetchBackendMarketSignals(market){
+  const url = `${state.backendUrl.replace(/\/$/,'')}/signals/${market}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+  const data = await res.json();
+  const out = {};
+  Object.entries(data.pairs).forEach(([pair, signals]) => { out[pair] = signals.map(backendSignalToLocal); });
+  return { pairs: out, lastScanAt: data.last_scan_at, isStale: data.is_stale };
+}
+
+async function connectToBackend(url){
+  const statusLine = document.getElementById("backendStatusLine");
+  if (!url){
+    state.backendConnected = false; state.backendUrl = "";
+    statusLine.textContent = "Not connected — running fully self-sufficient in this browser (still real data, just computed here instead of on a server).";
+    statusLine.style.color = "var(--muted-2)";
+    return;
+  }
+  statusLine.textContent = "Checking connection...";
+  statusLine.style.color = "var(--muted-2)";
+  const health = await checkBackendHealth(url);
+  if (!health){
+    state.backendConnected = false;
+    statusLine.textContent = `Couldn't reach ${url} — check the URL and that the backend is running. Falling back to self-sufficient mode.`;
+    statusLine.style.color = "var(--sell)";
+    return;
+  }
+  state.backendUrl = url;
+  state.backendConnected = true;
+  state.backendStatus = health;
+  statusLine.textContent = `Connected — dry_run=${health.dry_run}, auto_trade_enabled=${health.auto_trade_enabled}${health.last_scan_at ? ", last scan " + new Date(health.last_scan_at).toLocaleTimeString() : ""}.`;
+  statusLine.style.color = "var(--buy)";
+  await refreshAutoTradeStatus();
+}
+
+async function backendPost(path){
+  const res = await fetch(`${state.backendUrl.replace(/\/$/,'')}${path}`, { method: "POST" });
+  if (!res.ok){
+    const body = await res.text().catch(()=>"" );
+    throw new Error(`${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+async function refreshAutoTradeStatus(){
+  const backendPanel = document.getElementById("autoTradeBackendPanel");
+  const configPanel = document.getElementById("autoTradeConfigPanel");
+  if (!state.backendConnected){
+    backendPanel.style.display = "none";
+    configPanel.style.display = "block";
+    return;
+  }
+  try{
+    const res = await fetch(`${state.backendUrl.replace(/\/$/,'')}/autotrade/status`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    const status = await res.json();
+    backendPanel.style.display = "block";
+    configPanel.style.display = "none";
+
+    document.getElementById("autoTradeBackendStats").innerHTML = `
+      <div class="stat"><div class="k">Auto-trade</div><div class="v" style="color:${status.auto_trade_enabled?'var(--buy)':'var(--muted)'}">${status.auto_trade_enabled?"ON":"OFF"}</div></div>
+      <div class="stat"><div class="k">Mode</div><div class="v">${status.dry_run?"DRY RUN":"LIVE"}</div></div>
+      <div class="stat"><div class="k">Kill switch</div><div class="v" style="color:${status.kill_switch?'var(--sell)':'var(--muted)'}">${status.kill_switch?"ENGAGED":"off"}</div></div>
+      <div class="stat"><div class="k">Open trades</div><div class="v">${status.open_trades}</div></div>
+    `;
+    const note = document.getElementById("autoTradeBackendNote");
+    if (!status.broker_configured){
+      note.textContent = "No broker configured on the backend yet (METAAPI_TOKEN/METAAPI_ACCOUNT_ID not set) — enabling auto-trade will have nothing to execute against.";
+      note.style.color = "var(--sell)";
+    } else if (status.dry_run){
+      note.textContent = "Broker is configured but the backend is in DRY_RUN mode — decisions are logged, nothing real is sent to any broker.";
+      note.style.color = "var(--brass)";
+    } else {
+      note.textContent = "LIVE mode — real orders can be sent to your broker when auto-trade is ON and a signal clears every risk check.";
+      note.style.color = "var(--sell)";
+    }
+  } catch(err){
+    console.error("Failed to refresh auto-trade status:", err);
+    backendPanel.style.display = "none";
+    configPanel.style.display = "block";
+  }
+}
+
+document.getElementById("autoTradeEnableBtn").onclick = async () => {
+  try{ await backendPost("/autotrade/enable"); await refreshAutoTradeStatus(); }
+  catch(err){ alert(`Couldn't enable auto-trade: ${err.message}`); }
+};
+document.getElementById("autoTradeDisableBtn").onclick = async () => {
+  try{ await backendPost("/autotrade/disable"); await refreshAutoTradeStatus(); }
+  catch(err){ alert(`Couldn't disable auto-trade: ${err.message}`); }
+};
+document.getElementById("killSwitchBtn").onclick = async () => {
+  try{ await backendPost("/autotrade/kill-switch"); await refreshAutoTradeStatus(); }
+  catch(err){ alert(`Couldn't engage kill switch: ${err.message}`); }
+};
+document.getElementById("killSwitchReleaseBtn").onclick = async () => {
+  try{ await backendPost("/autotrade/kill-switch/release"); await refreshAutoTradeStatus(); }
+  catch(err){ alert(`Couldn't release kill switch: ${err.message}`); }
+};
+document.getElementById("closeAllBtn").onclick = async () => {
+  if (!confirm("Close ALL open positions on the connected broker account? This can't be undone.")) return;
+  try{ const result = await backendPost("/autotrade/close-all"); console.log(result); alert("Close-all request sent — check the backend's audit log for results."); }
+  catch(err){ alert(`Couldn't close positions: ${err.message}`); }
+};
+// ----------------------------------------------------------------------------
+// CRYPTO: Binance public REST API. No key required, CORS-enabled, genuinely
+// real market data. https://api.binance.com/api/v3/klines
+// ----------------------------------------------------------------------------
+const BINANCE_INTERVALS = { D1:"1d", H4:"4h", H1:"1h", M15:"15m", M5:"5m" };
+
+async function fetchBinanceCandles(symbol, tf, limit=220){
+  const interval = BINANCE_INTERVALS[tf];
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Binance returned ${res.status}`);
+  const data = await res.json();
+  return data.map(k => ({ time:k[0], open:+k[1], high:+k[2], low:+k[3], close:+k[4] }));
+}
+
+async function loadCryptoData(pair){
+  setConnectionStatus("crypto","connecting");
+  try{
+    // Fire all 5 timeframe requests at once instead of one-at-a-time --
+    // this was the main source of slowness (5 sequential round trips).
+    const entries = await Promise.all(
+      TIMEFRAMES.map(async tf => [tf, await fetchBinanceCandles(pair, tf, 180)])
+    );
+    const results = Object.fromEntries(entries);
+    setConnectionStatus("crypto","connected");
+    state.isRealData = true;
+    return results;
+  } catch(err){
+    console.error("Binance fetch failed:", err);
+    setConnectionStatus("crypto","error");
+    throw err;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// SYNTHETIC INDICES: Deriv public WebSocket API. No login required for market
+// data. app_id 1089 is Deriv's own published demo app_id for client-side
+// testing (documented at developers.deriv.com). We pull the REAL symbol list
+// via active_symbols rather than guessing codes, since Deriv's exact API
+// codes for every Boom/Crash/Jump/Step/Range Break variant aren't something
+// we want to fabricate.
+// ----------------------------------------------------------------------------
+let derivSocket = null;
+let derivSymbolMap = {};      // display_name -> underlying symbol code
+let derivReqId = 1;
+let derivPending = {};        // req_id -> {resolve, reject}
+
+function derivSend(request){
+  return new Promise((resolve, reject)=>{
+    if (!derivSocket || derivSocket.readyState !== WebSocket.OPEN){
+      reject(new Error("Deriv socket not connected"));
+      return;
+    }
+    const reqId = derivReqId++;
+    derivPending[reqId] = { resolve, reject };
+    derivSocket.send(JSON.stringify({ ...request, req_id: reqId }));
+    setTimeout(()=>{
+      if (derivPending[reqId]){ delete derivPending[reqId]; reject(new Error("Deriv request timed out")); }
+    }, 10000);
+  });
+}
+
+function connectDeriv(){
+  return new Promise((resolve, reject)=>{
+    if (derivSocket && derivSocket.readyState === WebSocket.OPEN){ resolve(); return; }
+    setConnectionStatus("synthetic","connecting");
+    try{
+      derivSocket = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+    } catch(err){
+      setConnectionStatus("synthetic","error");
+      reject(err); return;
+    }
+    derivSocket.onopen = () => resolve();
+    derivSocket.onerror = (err) => { setConnectionStatus("synthetic","error"); reject(err); };
+    derivSocket.onclose = () => { setConnectionStatus("synthetic","disconnected"); };
+    derivSocket.onmessage = (msg) => {
+      let data;
+      try { data = JSON.parse(msg.data); } catch(e){ return; }
+      if (data.req_id && derivPending[data.req_id]){
+        const { resolve: res, reject: rej } = derivPending[data.req_id];
+        delete derivPending[data.req_id];
+        if (data.error) rej(new Error(data.error.message || "Deriv API error"));
+        else res(data);
+      }
+    };
+  });
+}
+
+async function loadSyntheticSymbolList(){
+  await connectDeriv();
+  const res = await derivSend({ active_symbols: "brief", product_type: "basic" });
+  const symbols = (res.active_symbols || []).filter(s => s.market === "synthetic_index");
+  derivSymbolMap = {};
+  symbols.forEach(s => { derivSymbolMap[s.display_name] = s.symbol; });
+  MARKETS.synthetic.pairs = Object.keys(derivSymbolMap).sort();
+  setConnectionStatus("synthetic","connected");
+  return MARKETS.synthetic.pairs;
+}
+
+const DERIV_GRANULARITY = { D1:86400, H4:14400, H1:3600, M15:900, M5:300 };
+
+async function fetchDerivCandles(displayName, tf, count=220){
+  const symbol = derivSymbolMap[displayName];
+  if (!symbol) throw new Error(`No Deriv symbol code found for "${displayName}"`);
+  const res = await derivSend({
+    ticks_history: symbol, style: "candles",
+    granularity: DERIV_GRANULARITY[tf], count, end: "latest",
+  });
+  const candles = res.candles || [];
+  return candles.map(c => ({ time: c.epoch*1000, open:+c.open, high:+c.high, low:+c.low, close:+c.close }));
+}
+
+async function loadSyntheticData(pair){
+  setConnectionStatus("synthetic","connecting");
+  try{
+    if (!Object.keys(derivSymbolMap).length) await loadSyntheticSymbolList();
+    // The WebSocket already correlates concurrent requests by req_id (see
+    // derivSend), so we can fire all 5 timeframe requests at once.
+    const entries = await Promise.all(
+      TIMEFRAMES.map(async tf => [tf, await fetchDerivCandles(pair, tf, 180)])
+    );
+    const results = Object.fromEntries(entries);
+    setConnectionStatus("synthetic","connected");
+    state.isRealData = true;
+    return results;
+  } catch(err){
+    console.error("Deriv fetch failed:", err);
+    setConnectionStatus("synthetic","error");
+    throw err;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// ROUTER: picks the right real data source per market. Both remaining
+// markets (Crypto, Synthetic) have genuine key-less real-time feeds, so
+// this never needs a "no data" fallback path anymore.
+// ----------------------------------------------------------------------------
+async function loadDataForCurrentPair(){
+  if (state.market === "crypto") return await loadCryptoData(state.pair);
+  return await loadSyntheticData(state.pair); // synthetic
+}
+
+// ----------------------------------------------------------------------------
+// BACKGROUND PRICE TRACKING -- keeps entered trades updating live even while
+// you're looking at a different pair. Lightweight (single price, not full
+// candle history) so it can poll several pairs without hammering any API.
+// Returns null (not a fake price) when there's no real source to check.
+// ----------------------------------------------------------------------------
+async function fetchLatestPriceForPair(market, pair){
+  try{
+    if (market === "crypto"){
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${pair}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return parseFloat(data.price);
+    }
+    if (market === "synthetic"){
+      if (!derivSymbolMap[pair]) return null;
+      const res = await derivSend({ ticks_history: derivSymbolMap[pair], style:"ticks", count:1, end:"latest" });
+      const prices = res.history && res.history.prices;
+      return (prices && prices.length) ? parseFloat(prices[prices.length-1]) : null;
+    }
+    return null; // no real feed for this market
+  } catch(err){
+    console.error(`Background price fetch failed for ${market}:${pair}:`, err);
+    return null;
+  }
+}
+
+async function updateTrackedPrices(){
+  const toPoll = [...trackedPairs].filter(key => key !== `${state.market}:${state.pair}`);
+  if (!toPoll.length) return;
+  await Promise.all(toPoll.map(async key => {
+    const [market, pair] = key.split(":");
+    const price = await fetchLatestPriceForPair(market, pair);
+    if (price !== null) state.trackedPrices[key] = price;
+  }));
+  renderLiveMonitor(await getOpenJournalTrades());
+}
+
+async function getOpenJournalTrades(){
+  const entries = await loadJournal();
+  return entries.filter(e=>e.outcome==="open");
+}
+
+function refreshTrackedPairsFromEntries(entries){
+  trackedPairs.clear();
+  entries.filter(e=>e.outcome==="open").forEach(e => trackedPairs.add(`${e.market||"unknown"}:${e.pair}`));
+}
+</script>
+<script>
+// ============================================================================
+// STRUCTURE HELPERS
+// ============================================================================
+function isBullish(c){ return c.close > c.open; }
+function isBearish(c){ return c.close < c.open; }
+function bodyHigh(c){ return Math.max(c.open,c.close); }
+function bodyLow(c){ return Math.min(c.open,c.close); }
+function bodySize(c){ return Math.abs(c.close-c.open); }
+function rangeSize(c){ return c.high-c.low; }
+
+function findSwingPoints(candles, lookback=2){
+  const swings = [];
+  for(let i=lookback;i<candles.length-lookback;i++){
+    const window = candles.slice(i-lookback, i+lookback+1);
+    const c = candles[i];
+    if(c.high === Math.max(...window.map(w=>w.high))) swings.push({index:i, price:c.high, isHigh:true, candle:c});
+    if(c.low === Math.min(...window.map(w=>w.low))) swings.push({index:i, price:c.low, isHigh:false, candle:c});
+  }
+  return swings;
+}
+function readTrend(swings){
+  const highs = swings.filter(s=>s.isHigh), lows = swings.filter(s=>!s.isHigh);
+  if(highs.length<2 || lows.length<2) return "ranging";
+  const hh = highs[highs.length-1].price > highs[highs.length-2].price;
+  const hl = lows[lows.length-1].price > lows[lows.length-2].price;
+  const lh = highs[highs.length-1].price < highs[highs.length-2].price;
+  const ll = lows[lows.length-1].price < lows[lows.length-2].price;
+  if(hh && hl) return "bullish";
+  if(lh && ll) return "bearish";
+  return "ranging";
+}
+function hasDisplacement(candle, avgR, minMult=1.3){ return rangeSize(candle) >= avgR*minMult; }
+function avgRange(candles, n=20){
+  const slice = candles.slice(-n);
+  return slice.reduce((s,c)=>s+rangeSize(c),0)/Math.max(1,slice.length);
+}
+
+/**
+ * Genuine liquidity-sweep / stop-hunt detection: a candle wicks beyond a
+ * recent swing high or low but CLOSES back on the other side of it (a false
+ * breakout). This replaces an earlier placeholder that always returned true
+ * regardless of price action -- that was a real bug (a "confirmation" that
+ * never actually failed isn't a confirmation). Checked against the last
+ * `lookback` candles vs. the swing points immediately preceding them.
+ */
+function hasRecentLiquiditySweep(candles, swings, lookback=5){
+  const highs = swings.filter(s=>s.isHigh), lows = swings.filter(s=>!s.isHigh);
+  const recent = candles.slice(-lookback);
+  const priorHigh = highs.length ? highs[highs.length-1].price : null;
+  const priorLow = lows.length ? lows[lows.length-1].price : null;
+
+  const sweptHigh = priorHigh !== null && recent.some(c => c.high > priorHigh && c.close < priorHigh);
+  const sweptLow = priorLow !== null && recent.some(c => c.low < priorLow && c.close > priorLow);
+  return sweptHigh || sweptLow;
+}
+
+/**
+ * Genuine third-timeframe confirmation: several strategies only ever looked
+ * at two timeframes (an HTF for bias, an LTF for the trigger). This checks a
+ * THIRD, faster timeframe for momentum agreement before confirming a signal
+ * -- real multi-timeframe confluence, not just relabeled two-TF logic.
+ * Returns true if there isn't enough data to judge (never blocks a signal
+ * purely because a feed is short), so it only ever adds information, not
+ * arbitrary new failure modes.
+ */
+function fasterTimeframeAgrees(direction, fasterCandles, lookback=10){
+  if (!fasterCandles || fasterCandles.length < lookback) return true;
+  const recent = fasterCandles.slice(-lookback);
+  const netMove = recent[recent.length-1].close - recent[0].open;
+  const bullishCount = recent.filter(isBullish).length;
+  if (direction === "BUY") return netMove >= 0 || bullishCount >= Math.ceil(lookback/2);
+  return netMove <= 0 || bullishCount <= Math.floor(lookback/2);
+}
+
+function waitSignal(strategy, reason, pending=null){
+  // pending = { direction, entry, stop, tp1, tp2, tp3, rr } -- pass this when
+  // the zone/level is already known even though the trade hasn't triggered
+  // yet (e.g. an Order Block is identified but price hasn't returned to it).
+  // Lets the UI show a "pending setup" with real levels instead of a bare
+  // "waiting" message with nothing to act on.
+  const base = {strategy, direction:"WAIT", confidence:20, strength:"low", reason,
+    entry:null, stop:null, tp1:null, tp2:null, tp3:null, rr:null, confirmations:[],
+    isPending:false, pendingDirection:null};
+  if (pending && pending.entry!=null && pending.stop!=null){
+    return { ...base, entry:pending.entry, stop:pending.stop, tp1:pending.tp1??null,
+      tp2:pending.tp2??null, tp3:pending.tp3??null, rr:pending.rr??null,
+      isPending:true, pendingDirection:pending.direction };
+  }
+  return base;
+}
+
+// ============================================================================
+// STRATEGY REGISTRY -- each entry: {name, source, fn, enabled}
+// Enable/disable individually via the "Active Strategies" panel.
+// ============================================================================
+const STRATEGY_REGISTRY = [];
+function registerStrategy(name, source, fn){
+  STRATEGY_REGISTRY.push({ name, source, fn, enabled: true });
+}
+
+// --- 1. Order Block Return-To-Origin (OB Theory / RULE BASED TRADING) ---
+registerStrategy("order_block_rto", "OB Theory (Lutandula) + RULE BASED TRADING", function(ctx){
+  const htf = ctx.candles.D1, ltf = ctx.candles.H4;
+  if(!htf || !ltf || htf.length<10) return null;
+  const swings = findSwingPoints(htf);
+  const trend = readTrend(swings);
+  const confirmations = [{name:"htf_structure_read", passed: trend!=="ranging"}];
+  if(trend === "ranging") return waitSignal("order_block_rto","HTF structure is ranging — no valid bias (RULE BASED TRADING step 1).");
+
+  const wantBullish = trend === "bullish";
+  const lows = swings.filter(s=>!s.isHigh), highs = swings.filter(s=>s.isHigh);
+  let zone = null;
+  if(wantBullish){
+    for(const low of lows){
+      const c = htf[low.index];
+      if(!isBearish(c)) continue;
+      const validated = htf.slice(low.index+1).some(later=>later.high>bodyHigh(c));
+      if(validated) zone = {high:bodyHigh(c), low:c.low};
+    }
+  } else {
+    for(const high of highs){
+      const c = htf[high.index];
+      if(!isBullish(c)) continue;
+      const validated = htf.slice(high.index+1).some(later=>later.low<bodyLow(c));
+      if(validated) zone = {high:c.high, low:bodyLow(c)};
+    }
+  }
+  confirmations.push({name:"validated_source_ob_found", passed: zone!==null});
+  if(!zone) return null;
+  const lastPrice = ltf[ltf.length-1].close;
+  const inPoi = lastPrice>=zone.low && lastPrice<=zone.high;
+  confirmations.push({name:"price_returned_to_poi", passed: inPoi});
+  if(!inPoi){
+    const pendingEntry = wantBullish ? zone.high : zone.low; // where price would need to tap into the zone
+    const pendingStop = wantBullish ? zone.low : zone.high;
+    const pendingRisk = Math.abs(pendingEntry-pendingStop);
+    const pendingSign = wantBullish?1:-1;
+    return waitSignal("order_block_rto", `HTF ${trend} bias set, waiting for price to return to the Order Block POI.`, {
+      direction: wantBullish?"BUY":"SELL", entry:pendingEntry, stop:pendingStop,
+      tp1:pendingEntry+pendingRisk*2*pendingSign, tp2:pendingEntry+pendingRisk*3.5*pendingSign, tp3:pendingEntry+pendingRisk*6*pendingSign, rr:2,
+    });
+  }
+
+  const h1Agrees = fasterTimeframeAgrees(wantBullish?"BUY":"SELL", ctx.candles.H1);
+  confirmations.push({name:"h1_momentum_agrees", passed: h1Agrees});
+  if(!h1Agrees){
+    const pendingStop = wantBullish?zone.low:zone.high;
+    const pendingRisk = Math.abs(lastPrice-pendingStop);
+    const pendingSign = wantBullish?1:-1;
+    return waitSignal("order_block_rto", `Daily/H4 setup is valid, but H1 momentum is currently pointing the other way — waiting for it to align before entering.`, {
+      direction: wantBullish?"BUY":"SELL", entry:lastPrice, stop:pendingStop,
+      tp1:lastPrice+pendingRisk*2*pendingSign, tp2:lastPrice+pendingRisk*3.5*pendingSign, tp3:lastPrice+pendingRisk*6*pendingSign, rr:2,
+    });
+  }
+
+  const entry = lastPrice, stop = wantBullish?zone.low:zone.high, risk = Math.abs(entry-stop);
+  const sign = wantBullish?1:-1;
+  return { strategy:"order_block_rto", direction: wantBullish?"BUY":"SELL", confidence:65, strength:"medium",
+    reason:`HTF (Daily) ${trend} Source Order Block validated, price returned to POI, H1 momentum agrees — 3-step RULE BASED TRADING checklist satisfied plus an extra timeframe cross-check.`,
+    entry, stop, tp1: entry+risk*2*sign, tp2: entry+risk*3.5*sign, tp3: entry+risk*6*sign, rr:2, confirmations };
+});
+
+// --- 2. Breaker Block (Alberuni Trader) ---
+registerStrategy("breaker_block", "Breaker Blocks By Alberuni Trader", function(ctx){
+  const htf = ctx.candles.H4, ltf = ctx.candles.H1;
+  if(!htf || !ltf || htf.length<15) return null;
+  const swings = findSwingPoints(htf);
+  const lows = swings.filter(s=>!s.isHigh), highs = swings.filter(s=>s.isHigh);
+  const zones = [];
+  for(const low of lows){
+    const violated = htf.slice(low.index+1).some(c=>c.low<low.price);
+    if(!violated) continue;
+    const upCandles = htf.slice(Math.max(0,low.index-5), low.index).filter(isBullish);
+    if(!upCandles.length) continue;
+    zones.push({high:Math.max(...upCandles.map(bodyHigh)), low:Math.min(...upCandles.map(bodyLow)), bullish:true});
+  }
+  for(const high of highs){
+    const violated = htf.slice(high.index+1).some(c=>c.high>high.price);
+    if(!violated) continue;
+    const downCandles = htf.slice(Math.max(0,high.index-5), high.index).filter(isBearish);
+    if(!downCandles.length) continue;
+    zones.push({high:Math.max(...downCandles.map(bodyHigh)), low:Math.min(...downCandles.map(bodyLow)), bullish:false});
+  }
+  const confirmations = [{name:"breaker_zone_found", passed: zones.length>0}];
+  if(!zones.length) return null;
+  const zone = zones[zones.length-1];
+  const ar = avgRange(htf);
+  const displaced = hasDisplacement(htf[htf.length-1], ar);
+  const stopHunt = hasRecentLiquiditySweep(htf, swings);
+  confirmations.push({name:"stop_hunt_liquidity_sweep", passed:stopHunt});
+  confirmations.push({name:"mss_with_displacement", passed:displaced});
+  const zoneDirection = zone.bullish?"BUY":"SELL";
+  const zonePendingEntry = zone.bullish ? zone.high : zone.low;
+  const zonePendingStop = zone.bullish ? zone.low : zone.high;
+  const zonePendingRisk = Math.abs(zonePendingEntry-zonePendingStop);
+  const zonePendingSign = zone.bullish?1:-1;
+  const zonePending = { direction:zoneDirection, entry:zonePendingEntry, stop:zonePendingStop,
+    tp1:zonePendingEntry+zonePendingRisk*2*zonePendingSign, tp2:zonePendingEntry+zonePendingRisk*3.5*zonePendingSign, tp3:zonePendingEntry+zonePendingRisk*6*zonePendingSign, rr:2 };
+  if(!(displaced && stopHunt)) return waitSignal("breaker_block","Needs BOTH a stop hunt AND an MSS with displacement (Alberuni Trader rule) — not yet confirmed.", zonePending);
+
+  const lastPrice = ltf[ltf.length-1].close;
+  const retested = lastPrice>=zone.low && lastPrice<=zone.high;
+  confirmations.push({name:"retest_of_breaker_body", passed:retested});
+  if(!retested) return waitSignal("breaker_block","Stop hunt + MSS confirmed, waiting for retest of the breaker candle bodies.", zonePending);
+
+  const direction = zone.bullish?"BUY":"SELL";
+  const m15Agrees = fasterTimeframeAgrees(direction, ctx.candles.M15);
+  confirmations.push({name:"m15_momentum_agrees", passed: m15Agrees});
+  if(!m15Agrees){
+    const risk = Math.abs(lastPrice-zonePendingStop);
+    return waitSignal("breaker_block", "H4/H1 Breaker Block confirmed, but M15 momentum currently disagrees — waiting for alignment.", {
+      direction, entry:lastPrice, stop:zonePendingStop,
+      tp1:lastPrice+risk*2*zonePendingSign, tp2:lastPrice+risk*3.5*zonePendingSign, tp3:lastPrice+risk*6*zonePendingSign, rr:2,
+    });
+  }
+
+  const entry=lastPrice, stop=zone.bullish?zone.low:zone.high, risk=Math.abs(entry-stop), sign=zone.bullish?1:-1;
+  return {strategy:"breaker_block", direction, confidence:75, strength:"high",
+    reason:"High-probability Breaker Block: HTF liquidity raid + MSS with displacement + retest of breaker candle bodies + M15 momentum agreement (Alberuni Trader checklist plus an extra timeframe cross-check).",
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 3. Mitigation Block (Ali Khan's ICT Bible — Lower-High variant) ---
+registerStrategy("mitigation_block", "The ICT Bible V1 (Ali Khan)", function(ctx){
+  const htf = ctx.candles.H4, ltf = ctx.candles.H1;
+  if(!htf || !ltf || htf.length<15) return null;
+  const swings = findSwingPoints(htf);
+  const highs = swings.filter(s=>s.isHigh), lows = swings.filter(s=>!s.isHigh);
+  let zone = null;
+  for(let i=0;i<highs.length-1;i++){
+    const h1=highs[i];
+    const subLows = lows.filter(l=>l.index>h1.index); if(!subLows.length) continue;
+    const l1=subLows[0];
+    const subHighs = highs.filter(h=>h.index>l1.index); if(!subHighs.length) continue;
+    const h2=subHighs[0];
+    if(h2.price >= h1.price) continue;
+    const brokeL1 = htf.slice(h2.index+1).some(c=>c.low<l1.price);
+    if(!brokeL1) continue;
+    const upCandles = htf.slice(Math.max(0,l1.index-5), l1.index).filter(isBullish);
+    if(!upCandles.length) continue;
+    zone = {high:Math.max(...upCandles.map(bodyHigh)), low:Math.min(...upCandles.map(bodyLow)), bullish:false};
+  }
+  const confirmations = [{name:"lower_high_then_reversal", passed: zone!==null}];
+  if(!zone) return null;
+  const lastPrice = ltf[ltf.length-1].close;
+  const retested = lastPrice>=zone.low && lastPrice<=zone.high;
+  confirmations.push({name:"retest_of_mitigation_zone", passed:retested});
+  const mDirection = zone.bullish?"BUY":"SELL";
+  const mPendingEntry = zone.bullish ? zone.high : zone.low;
+  const mPendingStop = zone.bullish ? zone.low : zone.high;
+  const mPendingRisk = Math.abs(mPendingEntry-mPendingStop);
+  const mPendingSign = zone.bullish?1:-1;
+  const mPending = { direction:mDirection, entry:mPendingEntry, stop:mPendingStop,
+    tp1:mPendingEntry+mPendingRisk*2*mPendingSign, tp2:mPendingEntry+mPendingRisk*3.5*mPendingSign, tp3:mPendingEntry+mPendingRisk*6*mPendingSign, rr:2 };
+  if(!retested) return waitSignal("mitigation_block","Mitigation Block identified (Lower-High variant), waiting for retest.", mPending);
+  const direction = zone.bullish?"BUY":"SELL";
+  const m15Agrees = fasterTimeframeAgrees(direction, ctx.candles.M15);
+  confirmations.push({name:"m15_momentum_agrees", passed: m15Agrees});
+  if(!m15Agrees){
+    const risk = Math.abs(lastPrice-mPendingStop);
+    return waitSignal("mitigation_block", "Mitigation Block confirmed, but M15 momentum currently disagrees — waiting for alignment.", {
+      direction, entry:lastPrice, stop:mPendingStop,
+      tp1:lastPrice+risk*2*mPendingSign, tp2:lastPrice+risk*3.5*mPendingSign, tp3:lastPrice+risk*6*mPendingSign, rr:2,
+    });
+  }
+  const entry=lastPrice, stop=zone.bullish?zone.low:zone.high, risk=Math.abs(entry-stop), sign=zone.bullish?1:-1;
+  return {strategy:"mitigation_block", direction, confidence:55, strength:"medium",
+    reason:"Mitigation Block (Lower-High variant, weaker than a full Breaker) retested, M15 momentum agrees, per Ali Khan's ICT Bible distinction.",
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 4. Fair Value Gap (Alberuni Trader) ---
+registerStrategy("fair_value_gap", "Fair Value Gaps by Alberuni Trader", function(ctx){
+  const htf = ctx.candles.H4, ltf = ctx.candles.H1;
+  if(!htf || !ltf || htf.length<10) return null;
+  const swings = findSwingPoints(htf);
+  const fvgs = [];
+  for(let i=2;i<htf.length;i++){
+    const c1=htf[i-2], c3=htf[i];
+    if(c1.high < c3.low) fvgs.push({high:c3.low, low:c1.high, bullish:true});
+    else if(c1.low > c3.high) fvgs.push({high:c1.low, low:c3.high, bullish:false});
+  }
+  const confirmations = [{name:"fvg_present", passed: fvgs.length>0}];
+  if(!fvgs.length) return null;
+  const zone = fvgs[fvgs.length-1];
+  const ar = avgRange(htf);
+  const displaced = hasDisplacement(htf[htf.length-1], ar);
+  const stopHunt = hasRecentLiquiditySweep(htf, swings);
+  confirmations.push({name:"stop_hunt_or_poi", passed: stopHunt});
+  confirmations.push({name:"mss_with_displacement", passed:displaced});
+  const fvgCe = (zone.high+zone.low)/2;
+  const fvgDirection = zone.bullish?"BUY":"SELL";
+  const fvgPendingStop = zone.bullish?zone.low:zone.high;
+  const fvgPendingRisk = Math.abs(fvgCe-fvgPendingStop);
+  const fvgPendingSign = zone.bullish?1:-1;
+  const fvgPending = { direction:fvgDirection, entry:fvgCe, stop:fvgPendingStop,
+    tp1:fvgCe+fvgPendingRisk*2*fvgPendingSign, tp2:fvgCe+fvgPendingRisk*3.5*fvgPendingSign, tp3:fvgCe+fvgPendingRisk*6*fvgPendingSign, rr:2 };
+  if(!(stopHunt && displaced)) return waitSignal("fair_value_gap","Needs BOTH a stop hunt/POI AND an MSS with displacement (Alberuni Trader rule) — not yet confirmed.", fvgPending);
+
+  const ce = fvgCe;
+  const lastPrice = ltf[ltf.length-1].close;
+  const tolerance = (zone.high-zone.low)*0.2;
+  const inZone = Math.abs(lastPrice-ce) <= tolerance;
+  confirmations.push({name:"price_at_ce", passed:inZone});
+  if(!inZone) return waitSignal("fair_value_gap","HTF FVG confirmed, waiting for price to reach the Consequent Encroachment (50%).", fvgPending);
+
+  const direction = zone.bullish?"BUY":"SELL";
+  const m15Agrees = fasterTimeframeAgrees(direction, ctx.candles.M15);
+  confirmations.push({name:"m15_momentum_agrees", passed: m15Agrees});
+  if(!m15Agrees){
+    const risk = Math.abs(lastPrice-fvgPendingStop);
+    return waitSignal("fair_value_gap", "HTF FVG confirmed at CE, but M15 momentum currently disagrees — waiting for alignment.", {
+      direction, entry:lastPrice, stop:fvgPendingStop,
+      tp1:lastPrice+risk*2*fvgPendingSign, tp2:lastPrice+risk*3.5*fvgPendingSign, tp3:lastPrice+risk*6*fvgPendingSign, rr:2,
+    });
+  }
+
+  const entry=lastPrice, stop=zone.bullish?zone.low:zone.high, risk=Math.abs(entry-stop), sign=zone.bullish?1:-1;
+  return {strategy:"fair_value_gap", direction, confidence:70, strength:"high",
+    reason:"HTF FVG (BISI/SIBI) with displacement confirmed, price at Consequent Encroachment, M15 momentum agrees (Alberuni Trader FVG checklist plus an extra timeframe cross-check).",
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 5. CRT + Power of 3 + Turtle Soup ---
+registerStrategy("crt_power_of_3", "CRT METHOD + ict-power-of-3 + mastering-crt-by-maher", function(ctx){
+  const htf = ctx.candles.D1;
+  if(!htf || htf.length<5) return null;
+  const ref = htf[htf.length-3], manip = htf[htf.length-2], dist = htf[htf.length-1];
+  const sweptHigh = manip.high > ref.high, sweptLow = manip.low < ref.low;
+  const confirmations = [{name:"crt_range_identified", passed:true}];
+  if(!sweptHigh && !sweptLow) return null;
+  const sweepAbove = sweptHigh;
+  confirmations.push({name:"manipulation_sweep", passed:true});
+  const level = sweepAbove ? ref.high : ref.low;
+  const closedBack = sweepAbove ? (manip.close < level) : (manip.close > level);
+  confirmations.push({name:"tbs_body_close_reclaim", passed:closedBack});
+  const crtDirection = sweepAbove ? "SELL" : "BUY";
+  const crtPendingStop = sweepAbove?manip.high:manip.low;
+  const crtPendingRisk = Math.abs(dist.close-crtPendingStop);
+  const crtPendingSign = sweepAbove?-1:1;
+  const crtPending = { direction:crtDirection, entry:dist.close, stop:crtPendingStop,
+    tp1:dist.close+crtPendingRisk*2*crtPendingSign, tp2:dist.close+crtPendingRisk*3.5*crtPendingSign, tp3:dist.close+crtPendingRisk*6*crtPendingSign, rr:2 };
+  if(!closedBack) return waitSignal("crt_power_of_3","Only a wick-only (TWS) reclaim seen — low probability. Waiting for a body-close (TBS) reclaim.", crtPending);
+
+  const direction = sweepAbove ? "SELL" : "BUY";
+  const h4Agrees = fasterTimeframeAgrees(direction, ctx.candles.H4);
+  confirmations.push({name:"h4_momentum_agrees", passed: h4Agrees});
+  if(!h4Agrees) return waitSignal("crt_power_of_3", "Daily CRT distribution confirmed, but H4 momentum currently disagrees — waiting for alignment.", crtPending);
+
+  const entry = dist.close, stop = sweepAbove?manip.high:manip.low, risk=Math.abs(entry-stop);
+  const sign = sweepAbove?-1:1;
+  return {strategy:"crt_power_of_3", direction, confidence:72, strength:"high",
+    reason:`Power of 3 distribution phase confirmed: CRT range swept (${sweepAbove?"high":"low"}) with a TBS (body-close) reclaim, H4 momentum agrees.`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 6. Supply & Demand zones (Frank Miller) ---
+registerStrategy("supply_demand_zone", "Supply and Demand Trading (Frank Miller)", function(ctx){
+  const base = ctx.candles.D1, entryTf = ctx.candles.H4;
+  if(!base || !entryTf || base.length<15) return null;
+  const window = base.slice(-15);
+  const bullishRun = window.filter(isBullish), bearishRun = window.filter(isBearish);
+  const isErc = c => rangeSize(c)>0 && bodySize(c)/rangeSize(c) > 0.5;
+  const bullErcs = bullishRun.filter(isErc).length, bearErcs = bearishRun.filter(isErc).length;
+  let bias = null;
+  if(bullErcs>=2 && bullErcs>=bearErcs) bias="bullish"; else if(bearErcs>=2) bias="bearish";
+  const confirmations = [{name:"impulse_leg_min_2_ercs", passed: bias!==null}];
+  if(!bias) return null;
+  const isDemand = bias==="bullish";
+  const impulseCandles = isDemand ? bullishRun : bearishRun;
+  if(!impulseCandles.length) return null;
+  const firstImpulseIdx = base.indexOf(impulseCandles[0]);
+  const baseWindow = base.slice(Math.max(0, firstImpulseIdx-4), firstImpulseIdx);
+  if(!baseWindow.length) return null;
+
+  const longTailed = baseWindow.filter(c=> rangeSize(c)>0 && bodySize(c)/rangeSize(c) < 0.25).length;
+  confirmations.push({name:"base_not_disqualified", passed: longTailed<2});
+  if(longTailed>=2) return waitSignal("supply_demand_zone","Candidate zone disqualified: several long-tailed candles (Frank Miller invalid-zone filter).");
+
+  const distal = isDemand ? Math.min(...baseWindow.map(c=>c.low)) : Math.max(...baseWindow.map(c=>c.high));
+  const proximal = isDemand ? Math.min(...baseWindow.map(bodyLow)) : Math.max(...baseWindow.map(bodyHigh));
+  const lo = Math.min(distal,proximal), hi = Math.max(distal,proximal);
+  const lastPrice = entryTf[entryTf.length-1].close;
+  const atZone = lastPrice>=lo && lastPrice<=hi;
+  confirmations.push({name:"price_at_proximal_line", passed:atZone});
+  const sdDirection = isDemand?"BUY":"SELL";
+  const sdPendingRisk = Math.abs(proximal-distal);
+  const sdPendingSign = isDemand?1:-1;
+  const sdPending = { direction:sdDirection, entry:proximal, stop:distal,
+    tp1:proximal+sdPendingRisk*2*sdPendingSign, tp2:proximal+sdPendingRisk*3.5*sdPendingSign, tp3:proximal+sdPendingRisk*6*sdPendingSign, rr:2 };
+  if(!atZone) return waitSignal("supply_demand_zone","Valid zone identified, waiting for price to return to the proximal line.", sdPending);
+
+  const direction = isDemand?"BUY":"SELL";
+  const h1Agrees = fasterTimeframeAgrees(direction, ctx.candles.H1);
+  confirmations.push({name:"h1_momentum_agrees", passed: h1Agrees});
+  if(!h1Agrees) return waitSignal("supply_demand_zone", "Zone reached, but H1 momentum currently disagrees — waiting for alignment.", sdPending);
+
+  const entry = proximal, stop = distal, risk=Math.abs(entry-stop), sign=isDemand?1:-1;
+  return {strategy:"supply_demand_zone", direction, confidence:65, strength:"medium",
+    reason:`${isDemand?"Demand":"Supply"} zone at proximal line, base impulse had ≥2 ERCs, H1 momentum agrees (Frank Miller 3-step identification plus an extra timeframe cross-check).`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// Gold $100-zone (The Gold Elite) was removed here -- it only applied to
+// XAUUSD, which no longer exists as a pair now that Forex/Gold are gone.
+
+// --- Liquidity Sweep + Market Structure Shift (new) ---
+registerStrategy("liquidity_sweep_mss", "Liquidity Concepts (Forex Trading XL) + Defining Liquidity", function(ctx){
+  const htf = ctx.candles.H4, ltf = ctx.candles.H1;
+  if(!htf || !ltf || htf.length<20) return null;
+  const swings = findSwingPoints(htf);
+  const highs = swings.filter(s=>s.isHigh), lows = swings.filter(s=>!s.isHigh);
+  if(highs.length<2 || lows.length<2) return null;
+
+  const lastHigh = highs[highs.length-1], prevHigh = highs[highs.length-2];
+  const lastLow = lows[lows.length-1], prevLow = lows[lows.length-2];
+
+  // A liquidity sweep = price wicks beyond a prior swing point then closes back inside (no follow-through close beyond it)
+  const sweptHighNoClose = htf.slice(lastHigh.index+1).some(c => c.high > prevHigh.price && c.close < prevHigh.price);
+  const sweptLowNoClose = htf.slice(lastLow.index+1).some(c => c.low < prevLow.price && c.close > prevLow.price);
+  const confirmations = [{name:"liquidity_sweep_detected", passed: sweptHighNoClose || sweptLowNoClose}];
+  if(!sweptHighNoClose && !sweptLowNoClose) return null;
+
+  const bearishMSS = sweptHighNoClose; // swept buy-side liquidity -> expect MSS down
+  const ar = avgRange(htf);
+  const mssCandle = htf[htf.length-1];
+  const mssConfirmed = bearishMSS ? (mssCandle.close < lastLow.price) : (mssCandle.close > lastHigh.price);
+  const displaced = hasDisplacement(mssCandle, ar);
+  confirmations.push({name:"mss_close_beyond_opposite_swing", passed: mssConfirmed});
+  confirmations.push({name:"displacement_candle", passed: displaced});
+  const lsDirection = bearishMSS ? "SELL" : "BUY";
+  const lsAnticipatedEntry = bearishMSS ? lastLow.price : lastHigh.price; // where the MSS would need to close through
+  const lsAnticipatedStop = bearishMSS ? lastHigh.price : lastLow.price;
+  const lsRisk = Math.abs(lsAnticipatedEntry-lsAnticipatedStop);
+  const lsSign = bearishMSS?-1:1;
+  const lsPending = { direction:lsDirection, entry:lsAnticipatedEntry, stop:lsAnticipatedStop,
+    tp1:lsAnticipatedEntry+lsRisk*2*lsSign, tp2:lsAnticipatedEntry+lsRisk*3.5*lsSign, tp3:lsAnticipatedEntry+lsRisk*6*lsSign, rr:2 };
+  if(!(mssConfirmed && displaced)) return waitSignal("liquidity_sweep_mss", "Liquidity swept, waiting for a Market Structure Shift with real displacement before entering.", lsPending);
+
+  const lastPrice = ltf[ltf.length-1].close;
+  const direction = bearishMSS ? "SELL" : "BUY";
+  const m15Agrees = fasterTimeframeAgrees(direction, ctx.candles.M15);
+  confirmations.push({name:"m15_momentum_agrees", passed: m15Agrees});
+  if(!m15Agrees){
+    const stop = bearishMSS ? (sweptHighNoClose ? lastHigh.price : mssCandle.high) : (sweptLowNoClose ? lastLow.price : mssCandle.low);
+    const risk = Math.abs(lastPrice-stop);
+    return waitSignal("liquidity_sweep_mss", "Liquidity swept and MSS confirmed, but M15 momentum currently disagrees — waiting for alignment.", {
+      direction, entry:lastPrice, stop, tp1:lastPrice+risk*2*lsSign, tp2:lastPrice+risk*3.5*lsSign, tp3:lastPrice+risk*6*lsSign, rr:2,
+    });
+  }
+
+  const entry = lastPrice;
+  const stop = bearishMSS ? (sweptHighNoClose ? lastHigh.price : mssCandle.high) : (sweptLowNoClose ? lastLow.price : mssCandle.low);
+  const risk = Math.abs(entry-stop);
+  const sign = bearishMSS ? -1 : 1;
+  if (!risk) return null;
+  return {strategy:"liquidity_sweep_mss", direction, confidence:70, strength:"high",
+    reason:`${bearishMSS?"Buy-side":"Sell-side"} liquidity swept (wick beyond prior swing, no close through) then a displaced Market Structure Shift confirmed the reversal, with M15 momentum agreement.`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 9. Premium/Discount + Optimal Trade Entry (new) ---
+registerStrategy("premium_discount_ote", "S2TA FOREX G&B SWING + ICT Trading Strategy (OTE)", function(ctx){
+  const htf = ctx.candles.D1, ltf = ctx.candles.H4;
+  if(!htf || !ltf || htf.length<15) return null;
+  const swings = findSwingPoints(htf);
+  const trend = readTrend(swings);
+  const confirmations = [{name:"htf_trend_read", passed: trend!=="ranging"}];
+  if(trend === "ranging") return null;
+
+  const recentHighs = swings.filter(s=>s.isHigh).slice(-3);
+  const recentLows = swings.filter(s=>!s.isHigh).slice(-3);
+  if(!recentHighs.length || !recentLows.length) return null;
+  const rangeHigh = Math.max(...recentHighs.map(s=>s.price));
+  const rangeLow = Math.min(...recentLows.map(s=>s.price));
+  const span = rangeHigh - rangeLow;
+  if(!span) return null;
+
+  const lastPrice = ltf[ltf.length-1].close;
+  const posInRange = (lastPrice - rangeLow) / span; // 0 = at low (discount), 1 = at high (premium)
+  const wantBullish = trend === "bullish";
+
+  // OTE zone = 61.8%-78.6% retracement of the impulse leg, expressed here as
+  // the discount half (below 0.5) for longs, premium half (above 0.5) for shorts.
+  const inDiscount = posInRange <= 0.382;
+  const inPremium = posInRange >= 0.618;
+  const oteAligned = wantBullish ? inDiscount : inPremium;
+  confirmations.push({name:"price_in_ote_discount_or_premium_zone", passed: oteAligned});
+  const oteEntryTarget = wantBullish ? rangeLow + span*0.382 : rangeLow + span*0.618; // the OTE boundary itself
+  const oteStop = wantBullish ? rangeLow - span*0.05 : rangeHigh + span*0.05;
+  const oteRisk = Math.abs(oteEntryTarget-oteStop);
+  const oteSign = wantBullish?1:-1;
+  const otePending = { direction: wantBullish?"BUY":"SELL", entry:oteEntryTarget, stop:oteStop,
+    tp1:oteEntryTarget+oteRisk*2*oteSign, tp2:oteEntryTarget+oteRisk*3.5*oteSign, tp3:oteEntryTarget+oteRisk*6*oteSign, rr:2 };
+  if(!oteAligned) return waitSignal("premium_discount_ote", `HTF ${trend}, but price is at ${(posInRange*100).toFixed(0)}% of the range — not yet in the OTE zone (need ${wantBullish?"discount (<38%)":"premium (>62%)"}).`, otePending);
+
+  const direction = wantBullish?"BUY":"SELL";
+  const h1Agrees = fasterTimeframeAgrees(direction, ctx.candles.H1);
+  confirmations.push({name:"h1_momentum_agrees", passed: h1Agrees});
+  if(!h1Agrees){
+    const risk = Math.abs(lastPrice-oteStop);
+    return waitSignal("premium_discount_ote", `Price is in the OTE zone, but H1 momentum currently disagrees — waiting for alignment.`, {
+      direction, entry:lastPrice, stop:oteStop, tp1:lastPrice+risk*2*oteSign, tp2:lastPrice+risk*3.5*oteSign, tp3:lastPrice+risk*6*oteSign, rr:2,
+    });
+  }
+
+  const entry = lastPrice;
+  const stop = wantBullish ? rangeLow - span*0.05 : rangeHigh + span*0.05;
+  const risk = Math.abs(entry-stop);
+  const sign = wantBullish ? 1 : -1;
+  return {strategy:"premium_discount_ote", direction, confidence:62, strength:"medium",
+    reason:`HTF ${trend} trend with price at ${(posInRange*100).toFixed(0)}% of the dealing range — inside the Optimal Trade Entry zone, H1 momentum agrees.`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 10. Equal Highs / Equal Lows liquidity target (new) ---
+registerStrategy("equal_highs_lows", "Liquidity Concepts (Forex Trading XL) — Equal Highs/Lows", function(ctx){
+  const htf = ctx.candles.H4, ltf = ctx.candles.H1;
+  if(!htf || !ltf || htf.length<20) return null;
+  const swings = findSwingPoints(htf);
+  const highs = swings.filter(s=>s.isHigh), lows = swings.filter(s=>!s.isHigh);
+  const tolerance = avgRange(htf) * 0.15;
+
+  function findEqualPair(points){
+    for(let i=points.length-1;i>0;i--){
+      for(let j=i-1;j>=0;j--){
+        if(Math.abs(points[i].price - points[j].price) <= tolerance) return [points[j], points[i]];
+      }
+    }
+    return null;
+  }
+  const eqHighs = findEqualPair(highs.slice(-6));
+  const eqLows = findEqualPair(lows.slice(-6));
+  const confirmations = [{name:"equal_highs_or_lows_found", passed: !!(eqHighs||eqLows)}];
+  if(!eqHighs && !eqLows) return null;
+
+  const lastPrice = ltf[ltf.length-1].close;
+  // Trade the sweep: if equal highs exist above price, target a sweep + reversal down; vice versa for equal lows below.
+  let direction=null, level=null, targetSet=null;
+  if(eqHighs && lastPrice < eqHighs[0].price){ direction="SELL"; level=eqHighs[1].price; targetSet="equal highs (buy-side liquidity)"; }
+  else if(eqLows && lastPrice > eqLows[0].price){ direction="BUY"; level=eqLows[1].price; targetSet="equal lows (sell-side liquidity)"; }
+  if(!direction) return null;
+
+  const nearLevel = Math.abs(lastPrice - level) <= tolerance*2.5;
+  confirmations.push({name:"price_approaching_equal_liquidity", passed: nearLevel});
+  const eqStop = direction==="SELL" ? level*1.002 : level*0.998;
+  const eqRisk = Math.abs(level-eqStop);
+  const eqSign = direction==="BUY"?1:-1;
+  const eqPending = { direction, entry:level, stop:eqStop,
+    tp1:level+eqRisk*2*eqSign, tp2:level+eqRisk*3.5*eqSign, tp3:level+eqRisk*6*eqSign, rr:2 };
+  if(!nearLevel) return waitSignal("equal_highs_lows", `${targetSet} identified as a draw on liquidity, but price hasn't approached it yet.`, eqPending);
+
+  // M15 staleness check: if price already closed through the level recently,
+  // the liquidity's likely already been taken and this setup is stale --
+  // a different kind of third-timeframe check than the momentum-agreement
+  // used elsewhere, since this strategy anticipates a future sweep rather
+  // than confirming momentum already underway.
+  const m15 = ctx.candles.M15;
+  const alreadySwept = m15 && m15.slice(-5).some(c => direction==="SELL" ? c.close > level : c.close < level);
+  confirmations.push({name:"m15_liquidity_not_already_taken", passed: !alreadySwept});
+  if(alreadySwept) return waitSignal("equal_highs_lows", `${targetSet} looks like it was already swept on M15 — this setup is stale.`);
+
+  const entry = lastPrice;
+  const stop = direction==="SELL" ? level*1.002 : level*0.998;
+  const risk = Math.abs(entry-stop);
+  const sign = direction==="BUY"?1:-1;
+  if(!risk) return null;
+  return {strategy:"equal_highs_lows", direction, confidence:58, strength:"medium",
+    reason:`Price approaching ${targetSet} — a resting-liquidity magnet, not yet swept on M15. Expect a sweep and reaction on arrival.`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// --- 11. Malaysian SNR (line-chart Support & Resistance, "fresh vs unfresh" levels) ---
+// Source: multiple independently-consistent guides on "Malaysian SNR" /
+// "MSNR" (a retail methodology popular among Malaysian traders, works well
+// on Gold per its own community). Key mechanics, confirmed across sources:
+// - Levels come from a LINE CHART of candle CLOSES, not wicks. An "A-level"
+//   (resistance) forms at a peak in the close-price line; a "V-level"
+//   (support) forms at a valley.
+// - A level is "fresh" until a wick touches it; fresh levels are higher
+//   probability than "unfresh" (already-tested) ones.
+// - Storyline/trend alignment: in a bearish market only mark resistance
+//   (A-levels); in a bullish market only mark support (V-levels) -- trade
+//   pullbacks with the major trend, not against it.
+// - Entry: price reaches a fresh HTF (Daily) level and rejects, then a
+//   faster timeframe confirms by moving away from the level.
+function findCloseLinePivots(candles, lookback=3){
+  const pivots = []; // { index, price, isPeak }
+  for (let i=lookback; i<candles.length-lookback; i++){
+    const window = candles.slice(i-lookback, i+lookback+1);
+    const c = candles[i].close;
+    if (c === Math.max(...window.map(w=>w.close)) && c !== Math.min(...window.map(w=>w.close))){
+      pivots.push({ index:i, price:c, isPeak:true });
+    }
+    if (c === Math.min(...window.map(w=>w.close)) && c !== Math.max(...window.map(w=>w.close))){
+      pivots.push({ index:i, price:c, isPeak:false });
+    }
+  }
+  return pivots;
+}
+
+function isLevelFresh(candles, pivot){
+  // Fresh = no wick has touched this level since it formed.
+  const after = candles.slice(pivot.index+1);
+  if (pivot.isPeak){
+    return !after.some(c => c.high >= pivot.price);
+  }
+  return !after.some(c => c.low <= pivot.price);
+}
+
+registerStrategy("malaysian_snr", "Malaysian SNR (line-chart S&R, fresh/unfresh levels)", function(ctx){
+  const htf = ctx.candles.D1, ltf = ctx.candles.H1;
+  if (!htf || !ltf || htf.length < 20) return null;
+
+  const wickSwings = findSwingPoints(htf);
+  const trend = readTrend(wickSwings);
+  const confirmations = [{name:"storyline_trend_read", passed: trend!=="ranging"}];
+  if (trend === "ranging") return null;
+
+  // Storyline rule: bullish market -> only V-levels (support/BUY); bearish -> only A-levels (resistance/SELL).
+  const wantSupport = trend === "bullish";
+  const pivots = findCloseLinePivots(htf).filter(p => p.isPeak !== wantSupport);
+  confirmations.push({name:"snr_level_found_matching_storyline", passed: pivots.length>0});
+  if (!pivots.length) return null;
+
+  const freshLevels = pivots.filter(p => isLevelFresh(htf, p));
+  confirmations.push({name:"level_is_fresh", passed: freshLevels.length>0});
+  if (!freshLevels.length) return waitSignal("malaysian_snr", `${wantSupport?"Support":"Resistance"} levels found on the Daily close-line, but none are still fresh (untested by a wick).`);
+
+  const level = freshLevels[freshLevels.length-1];
+  const lastPrice = ltf[ltf.length-1].close;
+  const ar = avgRange(htf);
+  const nearLevel = Math.abs(lastPrice - level.price) <= ar * 0.6;
+  confirmations.push({name:"price_at_fresh_level", passed: nearLevel});
+  const snrDirection = wantSupport ? "BUY" : "SELL";
+  const snrStop = wantSupport ? level.price - ar*0.3 : level.price + ar*0.3;
+  const snrRisk = Math.abs(level.price-snrStop);
+  const snrSign = wantSupport?1:-1;
+  const snrPending = { direction:snrDirection, entry:level.price, stop:snrStop,
+    tp1:level.price+snrRisk*2*snrSign, tp2:level.price+snrRisk*3.5*snrSign, tp3:level.price+snrRisk*6*snrSign, rr:2 };
+  if (!nearLevel) return waitSignal("malaysian_snr", `Fresh ${wantSupport?"V-level (support)":"A-level (resistance)"} identified on the Daily storyline, waiting for price to reach it.`, snrPending);
+
+  // LTF confirmation: price should be moving AWAY from the level in the storyline direction.
+  const direction = wantSupport ? "BUY" : "SELL";
+  const ltfConfirms = fasterTimeframeAgrees(direction, ltf.slice(-6));
+  confirmations.push({name:"ltf_rejection_confirmation", passed: ltfConfirms});
+  if (!ltfConfirms){
+    const risk = Math.abs(lastPrice-snrStop);
+    return waitSignal("malaysian_snr", `Price is at a fresh ${wantSupport?"support":"resistance"} level, waiting for H1 to actually confirm the rejection before entering.`, {
+      direction, entry:lastPrice, stop:snrStop, tp1:lastPrice+risk*2*snrSign, tp2:lastPrice+risk*3.5*snrSign, tp3:lastPrice+risk*6*snrSign, rr:2,
+    });
+  }
+
+  const entry = lastPrice;
+  const stop = wantSupport ? level.price - ar*0.3 : level.price + ar*0.3;
+  const risk = Math.abs(entry-stop);
+  if (!risk) return null;
+  const sign = wantSupport ? 1 : -1;
+  return {strategy:"malaysian_snr", direction, confidence:63, strength:"medium",
+    reason:`Daily storyline is ${trend} — only trading with-trend pullbacks per Malaysian SNR. Price reacted at a fresh ${wantSupport?"V-level (support)":"A-level (resistance)"} on the close-price line chart, confirmed by H1 rejection.`,
+    entry, stop, tp1:entry+risk*2*sign, tp2:entry+risk*3.5*sign, tp3:entry+risk*6*sign, rr:2, confirmations};
+});
+
+// ============================================================================
+// CONFLUENCE SCORING & GRADING
+// ============================================================================
+function computeScores(signal){
+  const confs = signal.confirmations || [];
+  const passed = confs.filter(c=>c.passed).length;
+  const total = confs.length || 1;
+  const confluenceScore = Math.round((passed/total)*100);
+  const rrNum = parseFloat(signal.rr) || 0;
+  const probabilityScore = Math.min(95, Math.round(signal.confidence*0.7 + confluenceScore*0.3));
+  const riskScore = Math.max(5, Math.round(100 - Math.min(rrNum,6)/6*100)); // lower rr = higher risk score
+  let grade = "B";
+  if (signal.confidence>=70 && rrNum>=3 && confluenceScore>=80) grade = "Aplus";
+  else if (signal.confidence>=55 && rrNum>=2 && confluenceScore>=60) grade = "A";
+  return { confluenceScore, probabilityScore, riskScore, grade, gradeLabel: grade==="Aplus"?"A+":grade };
+}
+
+/**
+ * Folds each strategy's BACKTESTED win rate on the current pair into its
+ * grade and probability score, so "likely winning" is based on evidence,
+ * not just rule-matching. Run this after runAllBacktests() has populated
+ * state.backtestResults. Strategies with under MIN_BACKTEST_SAMPLE completed
+ * trades are left untouched (not enough evidence either way).
+ */
+function applyBacktestToGrading(signals, backtestResults){
+  return signals.map(signal => {
+    if (signal.direction === "WAIT" || signal.isError) return signal;
+    const bt = backtestResults[signal.strategy];
+    if (!bt || bt.total < MIN_BACKTEST_SAMPLE) return signal;
+
+    const blendedProbability = Math.round(signal.probabilityScore*0.55 + bt.winRate*0.45);
+    let grade = signal.grade;
+    if (bt.winRate < BACKTEST_WINRATE_WARNING_THRESHOLD){
+      grade = "B"; // a losing track record caps the grade no matter what else lines up
+    } else if (bt.winRate >= 65 && signal.grade === "A"){
+      grade = "Aplus"; // a genuinely strong track record can promote a good setup to A+
+    } else if (bt.winRate < 55 && signal.grade === "Aplus"){
+      grade = "A"; // an A+ needs the track record to actually back it up, not just rule confluence
+    }
+    return { ...signal, probabilityScore: Math.min(95, blendedProbability), grade, gradeLabel: grade==="Aplus"?"A+":grade };
+  });
+}
+
+function runEngine(candles){
+  const ctx = { candles };
+  const results = [];
+  for (const entry of STRATEGY_REGISTRY){
+    if (!entry.enabled) continue;
+    try {
+      const r = entry.fn(ctx);
+      if (r !== null){
+        const scores = computeScores(r);
+        results.push({ ...r, ...scores });
+      }
+    } catch (err) {
+      console.error(`Strategy ${entry.name} threw an error:`, err);
+      results.push({
+        strategy: entry.name, direction:"WAIT", confidence:0, strength:"low",
+        reason:"This strategy hit an internal error while evaluating and was skipped for this scan. It will try again on the next refresh.",
+        entry:null,stop:null,tp1:null,tp2:null,tp3:null,rr:null, confirmations:[], isError:true,
+        confluenceScore:0, probabilityScore:0, riskScore:100, grade:"B", gradeLabel:"B",
+      });
+    }
+  }
+  return results;
+}
+
+// ============================================================================
+// BACKTEST VALIDATION -- "does this strategy actually win on this pair?"
+// Walks the already-fetched candle history forward bar-by-bar, re-running
+// the strategy at each point with only data that would have been known at
+// the time (no lookahead), then checks whether each past signal would have
+// hit its stop or its TP1 first using the REAL candles that followed. This
+// runs entirely on data already in memory -- no extra network calls.
+// ============================================================================
+function simulateTradeForward(signal, futureCandles){
+  if (signal.entry==null || signal.stop==null || signal.tp1==null) return null;
+  const risk = Math.abs(signal.entry - signal.stop);
+  if (!risk) return null;
+  const isBuy = signal.direction === "BUY";
+  for (const c of futureCandles){
+    const hitStop = isBuy ? c.low <= signal.stop : c.high >= signal.stop;
+    const hitTp1 = isBuy ? c.high >= signal.tp1 : c.low <= signal.tp1;
+    // Conservative: if a candle could hit both, count the stop first.
+    if (hitStop) return { outcome:"loss", r:-1 };
+    if (hitTp1) return { outcome:"win", r: Math.abs(signal.tp1-signal.entry)/risk };
+  }
+  return { outcome:"open", r:0 };
+}
+
+function backtestStrategyOnPair(strategyEntry, fullCandles, warmup=40, maxLookahead=60){
+  const entryTf = "H1"; // walk-forward timeframe -- matches what most strategies use for their trigger
+  const entryCandles = fullCandles[entryTf];
+  if (!entryCandles || entryCandles.length <= warmup) return null;
+
+  const ratios = {};
+  Object.keys(fullCandles).forEach(tf => { ratios[tf] = fullCandles[tf].length / entryCandles.length; });
+
+  const trades = [];
+  for (let i=warmup; i<entryCandles.length; i++){
+    const knownByTf = {};
+    Object.keys(fullCandles).forEach(tf => {
+      const knownCount = Math.max(1, Math.floor((i+1)*ratios[tf]));
+      knownByTf[tf] = fullCandles[tf].slice(0, knownCount);
+    });
+    let signal;
+    try { signal = strategyEntry.fn({ candles: knownByTf }); }
+    catch(e){ continue; } // a strategy erroring mid-backtest just means we skip that bar, not fail the whole run
+    if (!signal || signal.direction === "WAIT") continue;
+
+    const future = entryCandles.slice(i+1, i+1+maxLookahead);
+    const result = simulateTradeForward(signal, future);
+    if (result && result.outcome !== "open") trades.push(result);
+  }
+
+  const wins = trades.filter(t=>t.outcome==="win").length;
+  const total = trades.length;
+  return {
+    total, wins, losses: total-wins,
+    winRate: total ? Math.round(wins/total*100) : null,
+    avgR: total ? Number((trades.reduce((s,t)=>s+t.r,0)/total).toFixed(2)) : null,
+  };
+}
+
+function runAllBacktests(candles){
+  const results = {};
+  STRATEGY_REGISTRY.forEach(s => {
+    if (!s.enabled) return;
+    results[s.name] = backtestStrategyOnPair(s, candles);
+  });
+  return results;
+}
+
+/** A strategy needs at least this many completed historical trades on the
+ * current pair before we trust its win rate enough to say anything about it
+ * -- otherwise a 2-trade sample could show "100%" or "0%" and mean nothing. */
+const MIN_BACKTEST_SAMPLE = 5;
+const BACKTEST_WINRATE_WARNING_THRESHOLD = 40; // below this %, flag it explicitly
+
+function backtestVerdict(result){
+  if (!result || result.total < MIN_BACKTEST_SAMPLE){
+    return { label: "Not enough history yet", tone: "wait", reliable: false };
+  }
+  if (result.winRate < BACKTEST_WINRATE_WARNING_THRESHOLD){
+    return { label: `${result.wins}W-${result.losses}L (${result.winRate}%) — losing track record here`, tone: "sell", reliable: true };
+  }
+  return { label: `${result.wins}W-${result.losses}L (${result.winRate}%) on this pair`, tone: "buy", reliable: true };
+}
+</script>
+<script>
+// ============================================================================
+// UI RENDERING
+// ============================================================================
+function fmt(n){ if(n===null||n===undefined||isNaN(n)) return "—"; return Number(n).toFixed(Math.abs(n)>100?2:5); }
+
+function buildTabs(){
+  const el = document.getElementById("marketTabs");
+  el.innerHTML = "";
+  Object.entries(MARKETS).forEach(([key,m])=>{
+    const btn = document.createElement("button");
+    btn.textContent = m.label;
+    if(state.view==="pair" && key===state.market) btn.classList.add("active");
+    btn.onclick = async ()=>{
+      state.view = "pair";
+      state.market=key;
+      if (key === "synthetic" && !MARKETS.synthetic.pairs.length){
+        showInfo("Loading the real Deriv synthetic index list…");
+        try { await loadSyntheticSymbolList(); clearInfo(); }
+        catch(err){ showError("Couldn't reach Deriv's symbol list. Try again in a moment."); }
+      }
+      state.pair = MARKETS[key].pairs[0] || ""; state.chartOffset = 0;
+      buildTabs(); buildPairSelect(); updateConnBadge(); applyView();
+      if (state.pair) scanCurrentPair();
+    };
+    el.appendChild(btn);
+  });
+
+  const scannerBtn = document.createElement("button");
+  scannerBtn.textContent = "Scanner";
+  if (state.view === "scanner") scannerBtn.classList.add("active");
+  scannerBtn.onclick = () => {
+    state.view = "scanner";
+    buildTabs();
+    applyView();
+  };
+  el.appendChild(scannerBtn);
+}
+
+function applyView(){
+  const pairView = document.getElementById("pairView");
+  const scannerView = document.getElementById("scannerView");
+  if (!pairView || !scannerView) return;
+  if (state.view === "scanner"){
+    pairView.style.display = "none";
+    scannerView.style.display = "block";
+  } else {
+    pairView.style.display = "block";
+    scannerView.style.display = "none";
+  }
+}
+function buildPairSelect(){
+  const el = document.getElementById("pairSelect");
+  el.innerHTML = "";
+  MARKETS[state.market].pairs.forEach(p=>{
+    const opt = document.createElement("option");
+    opt.value=p; opt.textContent=p;
+    if(p===state.pair) opt.selected=true;
+    el.appendChild(opt);
+  });
+  el.onchange = ()=>{ state.pair = el.value; state.chartOffset = 0; scanCurrentPair(); };
+}
+
+function buildStrategyToggles(){
+  const el = document.getElementById("strategyToggleList");
+  el.innerHTML = STRATEGY_REGISTRY.map((s,i)=>{
+    const bt = state.backtestResults[s.name];
+    const verdict = backtestVerdict(bt);
+    const btLabel = bt ? verdict.label : "Scan a pair to see its track record";
+    return `
+    <div class="strategy-toggle">
+      <div><span class="name">${s.name.replace(/_/g," ")}</span><span class="src">${s.source}</span>
+        <span class="src" style="color:var(--${bt&&verdict.reliable?verdict.tone:'muted-2'});">${btLabel}</span>
+      </div>
+      <label class="switch"><input type="checkbox" ${s.enabled?"checked":""} data-idx="${i}" class="strategy-enable-cb"><span class="switch-track"></span></label>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".strategy-enable-cb").forEach(cb=>{
+    cb.onchange = (e)=>{
+      STRATEGY_REGISTRY[parseInt(e.target.dataset.idx)].enabled = e.target.checked;
+      scanCurrentPair();
+    };
+  });
+}
+
+function pickHeroSignal(signals){
+  const actionable = signals.filter(s=>s.direction!=="WAIT" && !s.isError);
+  if(!actionable.length) return { best:null, filteredOut:[], losingTrackRecord:[] };
+  const meetsBar = actionable.filter(s => (parseFloat(s.rr) || 0) >= state.minRR);
+  const filteredOut = actionable.filter(s => (parseFloat(s.rr) || 0) < state.minRR);
+  if(!meetsBar.length) return { best:null, filteredOut, losingTrackRecord:[] };
+
+  // Don't let a strategy with a demonstrated losing track record on THIS
+  // pair become the headline pick, even if its rules matched. A rule match
+  // isn't the same as a winning setup -- this is the actual empirical check.
+  const losingTrackRecord = meetsBar.filter(s => {
+    const bt = state.backtestResults[s.strategy];
+    return bt && bt.total >= MIN_BACKTEST_SAMPLE && bt.winRate < BACKTEST_WINRATE_WARNING_THRESHOLD;
+  });
+  const eligible = meetsBar.filter(s => !losingTrackRecord.includes(s));
+
+  if (!eligible.length) return { best:null, filteredOut, losingTrackRecord };
+  const best = eligible.reduce((b,s)=> s.confidence>b.confidence ? s : b, eligible[0]);
+  return { best, filteredOut, losingTrackRecord };
+}
+
+function renderHero(signals){
+  const hero = document.getElementById("heroSignal");
+  const { best, filteredOut, losingTrackRecord } = pickHeroSignal(signals);
+
+  if(!best){
+    if (losingTrackRecord && losingTrackRecord.length){
+      const top = losingTrackRecord[0];
+      const bt = state.backtestResults[top.strategy];
+      hero.innerHTML = `<div class="hero"><div class="hero-badge wait">WAIT</div><div class="hero-detail">
+        <div class="strat">Found a setup, but it has a losing track record on ${state.pair}</div>
+        <div class="reason">${top.strategy.replace(/_/g," ")} would go ${top.direction}, but backtesting its own rules against ${state.pair}'s recent history shows ${bt.wins}W-${bt.losses}L (${bt.winRate}%) — held back rather than shown as a live pick.</div>
+      </div></div>`;
+    } else if (filteredOut && filteredOut.length){
+      const top = filteredOut.reduce((b,s)=> s.confidence>b.confidence ? s : b, filteredOut[0]);
+      hero.innerHTML = `<div class="hero"><div class="hero-badge wait">WAIT</div><div class="hero-detail">
+        <div class="strat">Found a setup, but it didn't clear your ${state.minRR}:1 bar</div>
+        <div class="reason">${top.strategy.replace(/_/g," ")} would go ${top.direction} at ${top.rr}:1 — below your minimum. Lower the bar in Settings if you want to see it.</div>
+      </div></div>`;
+    } else {
+      hero.innerHTML = `<div class="hero"><div class="hero-badge wait">WAIT</div><div class="hero-detail">
+        <div class="strat">No strategy confirms a trade right now</div>
+        <div class="reason">${signals.length} active strategies checked — none have every confirmation lined up on ${state.pair} at the moment.</div>
+      </div></div>`;
+    }
+    return;
+  }
+  const dirClass = best.direction==="BUY"?"buy":"sell";
+  const bt = state.backtestResults[best.strategy];
+  const verdict = backtestVerdict(bt);
+  const backtestBadge = `<span style="font-size:11px; padding:2px 8px; border-radius:20px; margin-left:6px; background:var(--${verdict.tone==='wait'?'wait':verdict.tone}-dim); color:var(--${verdict.tone==='wait'?'wait':verdict.tone});">${verdict.label}</span>`;
+  hero.innerHTML = `
+    <div class="hero">
+      <div class="hero-badge ${dirClass}">${best.direction}</div>
+      <div class="hero-detail">
+        <div class="strat">
+          <span class="grade-badge ${best.grade}">${best.gradeLabel}</span>
+          ${best.strategy.replace(/_/g," ")} · ${best.confidence}% confidence · ${best.rr}:1 R:R
+          ${backtestBadge}
+        </div>
+        <div class="reason">${best.reason}</div>
+      </div>
+      <div class="hero-levels">
+        <div class="lvl"><div class="k">Entry</div><div class="v mono">${fmt(best.entry)}</div></div>
+        <div class="lvl"><div class="k">Stop</div><div class="v mono">${fmt(best.stop)}</div></div>
+        <div class="lvl"><div class="k">Target</div><div class="v mono">${fmt(best.tp1)}</div></div>
+        <div class="lvl"><div class="k">R:R</div><div class="v mono">${best.rr}</div></div>
+      </div>
+    </div>
+    <div class="score-grid">
+      <div class="score"><div class="k">Confidence</div><div class="v">${best.confidence}%</div></div>
+      <div class="score"><div class="k">Probability</div><div class="v">${best.probabilityScore}%</div></div>
+      <div class="score"><div class="k">Risk score</div><div class="v">${best.riskScore}</div></div>
+      <div class="score"><div class="k">Confluence</div><div class="v">${best.confluenceScore}%</div></div>
+    </div>
+    <div style="margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <button class="action primary" id="markEnteredBtn">I entered this trade</button>
+      <span style="font-size:11.5px; color:var(--muted-2); flex:1; min-width:180px;">Moves it to the Live Trade Monitor below and tracks it separately — the engine keeps scanning ${state.pair} for new setups after you enter.</span>
+    </div>`;
+
+  state.currentHeroSignal = { ...best, pair: state.pair, market: state.market };
+  const enterBtn = document.getElementById("markEnteredBtn");
+  if (enterBtn) enterBtn.onclick = markCurrentHeroAsEntered;
+
+  if (best.gradeLabel === "A+") maybeFireAlert(best);
+}
+
+async function markCurrentHeroAsEntered(){
+  const signal = state.currentHeroSignal;
+  if (!signal || signal.entry === null || signal.entry === undefined){
+    alert("No active signal to enter right now.");
+    return;
+  }
+  const entry = {
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    opened: Date.now(), closed: null,
+    pair: signal.pair, market: signal.market,
+    direction: signal.direction, entry: signal.entry, stop: signal.stop,
+    target: signal.tp1 ?? null,
+    strategy: signal.strategy, notes: `Auto-logged from the ${signal.gradeLabel || signal.grade} signal card.`,
+    screenshot: null, outcome: "open",
+  };
+  try{
+    const entries = await loadJournal();
+    entries.push(entry);
+    await saveJournal(entries);
+    trackedPairs.add(`${signal.market}:${signal.pair}`);
+    await renderJournal();
+    const btn = document.getElementById("markEnteredBtn");
+    if (btn){ btn.textContent = "Entered ✓ — tracking in Live Trade Monitor"; btn.disabled = true; }
+    showInfo(`${signal.pair} ${signal.direction} is now tracked in the Live Trade Monitor. It'll keep updating even as you look at other pairs.`);
+    setTimeout(clearInfo, 6000);
+  } catch(err){
+    console.error("Failed to mark trade as entered:", err);
+    alert("Couldn't save this trade. Try again.");
+  }
+}
+
+function renderSignals(){
+  const list = document.getElementById("signalsList");
+  const meta = document.getElementById("signalMeta");
+  if(!state.signals.length){ list.innerHTML = '<div class="empty">No signals yet, or all strategies are disabled.</div>'; return; }
+  meta.textContent = `${state.pair} · ${state.signals.length} active strategies · real data`;
+  list.innerHTML = state.signals.map(s=>{
+    const dirClass = s.direction==="BUY"?"buy":s.direction==="SELL"?"sell":"wait";
+    const belowBar = s.direction!=="WAIT" && !s.isError && (parseFloat(s.rr)||0) < state.minRR;
+    const levels = s.entry!==null ? `
+      <div class="levels">
+        <div class="level"><div class="k">Entry</div><div class="v mono">${fmt(s.entry)}</div></div>
+        <div class="level"><div class="k">Stop</div><div class="v mono">${fmt(s.stop)}</div></div>
+        <div class="level"><div class="k">TP1</div><div class="v mono">${fmt(s.tp1)}</div></div>
+        <div class="level"><div class="k">R:R</div><div class="v mono">${s.rr}</div></div>
+      </div>` : "";
+    const barNote = belowBar ? `<div style="font-size:11px; color:var(--muted-2); margin-top:8px;">Below your ${state.minRR}:1 minimum — not shown as the headline signal.</div>` : "";
+    const gradeChip = (s.direction!=="WAIT" && !s.isError) ? `<span class="grade-badge ${s.grade}" style="margin-right:6px;">${s.gradeLabel}</span>` : "";
+    const bt = state.backtestResults[s.strategy];
+    const verdict = backtestVerdict(bt);
+    const btNote = (s.direction!=="WAIT" && !s.isError) ? `<div style="font-size:11px; margin-top:8px; color:var(--${verdict.tone==='wait'?'muted-2':verdict.tone});">Backtest on ${state.pair}: ${verdict.label}</div>` : "";
+    return `
+      <div class="signal-card ${belowBar?'wait':dirClass}">
+        <div class="signal-top">
+          <div>${gradeChip}<span class="signal-dir ${belowBar?'wait':dirClass}">${belowBar ? s.direction+" (filtered)" : s.direction}</span> <span class="strategy-name">· ${s.strategy}</span></div>
+          <div class="confidence">${s.confidence}% <span class="confidence-bar"><span class="confidence-fill" style="width:${s.confidence}%"></span></span></div>
+        </div>
+        <div class="reason">${s.reason}</div>
+        ${levels}
+        ${barNote}
+        ${btNote}
+      </div>`;
+  }).join("");
+}
+
+function showError(message){
+  const banner = document.getElementById("errorBanner");
+  banner.textContent = message; banner.style.display = "block";
+}
+function clearError(){
+  const banner = document.getElementById("errorBanner");
+  banner.style.display = "none"; banner.textContent = "";
+}
+function showInfo(message){
+  const banner = document.getElementById("infoBanner");
+  banner.textContent = message; banner.style.display = "block";
+}
+function clearInfo(){
+  const banner = document.getElementById("infoBanner");
+  banner.style.display = "none"; banner.textContent = "";
+}
+
+function applyTheme(theme){
+  state.theme = theme;
+  document.body.setAttribute("data-theme", theme);
+  document.getElementById("themeToggle").textContent = theme === "dark" ? "◐" : "◑";
+  drawChart(); // re-render with the new theme's colors
+}
+
+// ============================================================================
+// LIVE CHART -- lightweight candlestick renderer on a plain <canvas>.
+// No charting library dependency (nothing to fail to load from a CDN);
+// the coordinate math is a pure function (computeChartLayout) so it's
+// testable independent of the actual canvas drawing calls.
+// ============================================================================
+function computeChartLayout(candles, width, height, padding, offset=0, visibleCount=80){
+  // offset = how many candles back from the live edge we're scrolled;
+  // visibleCount = how many candles are shown at once (zoom level).
+  const end = Math.max(1, candles.length - offset);
+  const start = Math.max(0, end - visibleCount);
+  const visible = candles.slice(start, end);
+  if (!visible.length) return null;
+
+  const highs = visible.map(c=>c.high), lows = visible.map(c=>c.low);
+  let minPrice = Math.min(...lows), maxPrice = Math.max(...highs);
+  const span = (maxPrice - minPrice) || (maxPrice * 0.001) || 1;
+  minPrice -= span * 0.08; maxPrice += span * 0.08;
+
+  const plotW = width - padding.left - padding.right;
+  const plotH = height - padding.top - padding.bottom;
+  const slotW = plotW / visible.length;
+  const candleW = Math.max(2, Math.min(14, slotW * 0.62));
+
+  const priceToY = (price) => padding.top + plotH * (1 - (price - minPrice) / (maxPrice - minPrice));
+  const indexToX = (i) => padding.left + slotW * i + slotW / 2;
+
+  return { visible, minPrice, maxPrice, priceToY, indexToX, slotW, candleW, plotW, plotH, start, end };
+}
+
+const CHART_TFS = ["D1","H4","H1","M15","M5"];
+
+// Fixed, distinguishable palette so each strategy always draws in the same
+// color across scans -- easier to learn "orange = breaker block" than to
+// have colors reshuffle every refresh.
+const OVERLAY_PALETTE = ["#C9A227","#3FB68C","#E2574C","#6FA8DC","#B98BD6","#E0A458","#5FBFB3","#D97757","#8FBF6B","#C77DBE","#7FA8C9"];
+function colorForStrategy(name){
+  const idx = STRATEGY_REGISTRY.findIndex(s => s.name === name);
+  return OVERLAY_PALETTE[(idx >= 0 ? idx : 0) % OVERLAY_PALETTE.length];
+}
+
+function buildChartOverlayChips(){
+  const el = document.getElementById("chartOverlayChips");
+  if (!el) return;
+  el.innerHTML = STRATEGY_REGISTRY.map(s => {
+    const on = state.chartOverlayEnabled[s.name] !== false;
+    const color = colorForStrategy(s.name);
+    return `<span class="overlay-chip ${on?'':'off'}" data-strategy="${s.name}">
+      <span class="dot" style="background:${color};"></span>${s.name.replace(/_/g," ")}
+    </span>`;
+  }).join("");
+  el.querySelectorAll(".overlay-chip").forEach(chip => {
+    chip.onclick = () => {
+      const name = chip.dataset.strategy;
+      state.chartOverlayEnabled[name] = state.chartOverlayEnabled[name] === false ? true : false;
+      buildChartOverlayChips();
+      drawChart();
+    };
+  });
+}
+
+function buildChartTfTabs(){
+  const el = document.getElementById("chartTfTabs");
+  el.innerHTML = "";
+  CHART_TFS.forEach(tf => {
+    const btn = document.createElement("button");
+    btn.textContent = tf;
+    if (tf === state.chartTimeframe) btn.classList.add("active");
+    btn.onclick = () => {
+      state.chartTimeframe = tf;
+      state.chartOffset = 0; // jump back to the live edge when switching timeframe
+      buildChartTfTabs();
+      drawChart();
+    };
+    el.appendChild(btn);
+  });
+}
+
+function drawChart(){
+  const canvas = document.getElementById("priceChart");
+  if (!canvas || !canvas.getContext) return;
+  const candles = state.candles && state.candles[state.chartTimeframe];
+  const meta = document.getElementById("chartMeta");
+
+  if (!candles || !candles.length){
+    if (meta) meta.textContent = "";
+    return;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(300, rect.width || 600);
+  const height = Math.max(200, rect.height || 340);
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const styles = getComputedStyle(document.body);
+  const colors = {
+    buy: styles.getPropertyValue("--buy").trim() || "#3FB68C",
+    sell: styles.getPropertyValue("--sell").trim() || "#E2574C",
+    brass: styles.getPropertyValue("--brass").trim() || "#C9A227",
+    border: styles.getPropertyValue("--border").trim() || "#262C33",
+    muted: styles.getPropertyValue("--muted-2").trim() || "#575E67",
+  };
+
+  const padding = { top:16, right:70, bottom:20, left:8 };
+  const maxOffset = Math.max(0, candles.length - state.chartVisibleCount);
+  state.chartOffset = Math.min(Math.max(0, state.chartOffset), maxOffset);
+  const layout = computeChartLayout(candles, width, height, padding, state.chartOffset, state.chartVisibleCount);
+  if (!layout) return;
+  const { visible, priceToY, indexToX, candleW } = layout;
+
+  ctx.strokeStyle = colors.border; ctx.fillStyle = colors.muted;
+  ctx.font = "10px 'JetBrains Mono', monospace";
+  ctx.lineWidth = 1;
+  const gridLines = 4;
+  for (let g=0; g<=gridLines; g++){
+    const price = layout.minPrice + (layout.maxPrice - layout.minPrice) * (g/gridLines);
+    const y = priceToY(price);
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width-padding.right, y); ctx.stroke();
+    ctx.fillText(fmt(price), width-padding.right+6, y+3);
+  }
+
+  visible.forEach((c, i) => {
+    const x = indexToX(i);
+    const bull = c.close >= c.open;
+    ctx.strokeStyle = bull ? colors.buy : colors.sell;
+    ctx.fillStyle = bull ? colors.buy : colors.sell;
+    ctx.beginPath(); ctx.moveTo(x, priceToY(c.high)); ctx.lineTo(x, priceToY(c.low)); ctx.stroke();
+    const bodyTop = priceToY(Math.max(c.open,c.close));
+    const bodyBot = priceToY(Math.min(c.open,c.close));
+    const h = Math.max(1, bodyBot - bodyTop);
+    ctx.fillRect(x - candleW/2, bodyTop, candleW, h);
+  });
+
+  // Only overlay entry/stop/target lines when looking at the live edge --
+  // they'd be misleading pinned to old candles while scrolled into history.
+  if (state.chartOffset === 0){
+    const actionable = (state.signals || []).filter(s => s.direction!=="WAIT" && !s.isError);
+    const pending = (state.signals || []).filter(s => s.isPending && !s.isError);
+    const toShowLive = actionable.filter(s => state.chartOverlayEnabled[s.strategy] !== false); // default ON
+    const toShowPending = pending.filter(s => state.chartOverlayEnabled[s.strategy] !== false);
+
+    const drawSignalLevels = (signal, opts) => {
+      if (signal.entry === null || signal.entry === undefined) return;
+      const strategyColor = colorForStrategy(signal.strategy);
+      const drawLevel = (price, dash, alpha, label) => {
+        if (price === null || price === undefined || isNaN(price)) return;
+        const y = priceToY(price);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = strategyColor; ctx.setLineDash(dash); ctx.lineWidth = opts.lineWidth;
+        ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width-padding.right, y); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = strategyColor; ctx.font = "9px 'JetBrains Mono', monospace"; ctx.globalAlpha = 1;
+        ctx.fillText(label, padding.left+4, y-2);
+      };
+      const shortName = signal.strategy.replace(/_/g," ").split(" ").map(w=>w[0]).join("").toUpperCase();
+      drawLevel(signal.entry, opts.entryDash, opts.entryAlpha, opts.prefix + shortName);
+      drawLevel(signal.stop, opts.slDash, opts.slAlpha, "");
+      drawLevel(signal.tp1, opts.slDash, opts.slAlpha, "");
+    };
+
+    // Live, triggered signals: solid-ish, full opacity, own color per strategy.
+    toShowLive.forEach(signal => drawSignalLevels(signal, {
+      lineWidth:1.1, entryDash:[2,2], entryAlpha:0.9, slDash:[5,3], slAlpha:0.5, prefix:"",
+    }));
+    // Pending/possible setups: finer dotted line, lower opacity, "~" prefix
+    // so they read as "not live yet" at a glance without needing the legend.
+    toShowPending.forEach(signal => drawSignalLevels({ ...signal, entry:signal.entry, stop:signal.stop, tp1:signal.tp1 }, {
+      lineWidth:1, entryDash:[1,3], entryAlpha:0.55, slDash:[1,4], slAlpha:0.3, prefix:"~",
+    }));
+  }
+
+  if (meta){
+    const last = candles[candles.length-1];
+    const scrolledNote = state.chartOffset > 0 ? ` · scrolled back ${state.chartOffset} candles` : "";
+    const pendingCount = (state.signals||[]).filter(s=>s.isPending).length;
+    const pendingNote = pendingCount ? ` · ${pendingCount} possible entr${pendingCount===1?"y":"ies"} shown dotted` : "";
+    meta.textContent = `${state.pair} · ${state.chartTimeframe} · ${visible.length} candles${scrolledNote} · last close ${fmt(last.close)}${pendingNote}`;
+  }
+}
+
+// ----------------------------------------------------------------------------
+// CHART INTERACTION: drag to pan, wheel/pinch to zoom, plus the explicit
+// buttons for anyone who'd rather tap than drag on mobile.
+// ----------------------------------------------------------------------------
+function setupChartInteraction(){
+  const canvas = document.getElementById("priceChart");
+  if (!canvas) return;
+
+  let dragging = false, dragStartX = 0, dragStartOffset = 0;
+
+  const onPointerDown = (e) => {
+    dragging = true; dragStartX = e.clientX; dragStartOffset = state.chartOffset;
+    canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    if (!dragging) return;
+    const candles = state.candles && state.candles[state.chartTimeframe];
+    if (!candles) return;
+    const rect = canvas.getBoundingClientRect();
+    const slotW = rect.width / state.chartVisibleCount;
+    const deltaCandles = Math.round((e.clientX - dragStartX) / Math.max(1, slotW));
+    // dragging right (positive delta) should reveal OLDER candles -> increase offset
+    const maxOffset = Math.max(0, candles.length - state.chartVisibleCount);
+    state.chartOffset = Math.min(Math.max(0, dragStartOffset - deltaCandles), maxOffset);
+    drawChart();
+  };
+  const onPointerUp = (e) => {
+    dragging = false;
+    canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId);
+  };
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("pointerleave", onPointerUp);
+
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const candles = state.candles && state.candles[state.chartTimeframe];
+    if (!candles) return;
+    const zoomDir = e.deltaY > 0 ? 1 : -1; // scroll down = zoom out (more candles), up = zoom in
+    state.chartVisibleCount = Math.min(200, Math.max(20, state.chartVisibleCount + zoomDir*10));
+    drawChart();
+  }, { passive: false });
+}
+
+document.getElementById("chartScrollOlderBtn").onclick = () => {
+  const candles = state.candles && state.candles[state.chartTimeframe];
+  if (!candles) return;
+  const maxOffset = Math.max(0, candles.length - state.chartVisibleCount);
+  state.chartOffset = Math.min(state.chartOffset + Math.round(state.chartVisibleCount*0.4), maxOffset);
+  drawChart();
+};
+document.getElementById("chartScrollNewerBtn").onclick = () => {
+  state.chartOffset = Math.max(0, state.chartOffset - Math.round(state.chartVisibleCount*0.4));
+  drawChart();
+};
+document.getElementById("chartResetBtn").onclick = () => {
+  state.chartOffset = 0;
+  drawChart();
+};
+
+window.addEventListener("resize", () => { drawChart(); });
+</script>
+<script>
+// ============================================================================
+// PERSISTENT JOURNAL
+// ============================================================================
+// ----------------------------------------------------------------------------
+// STORAGE LAYER -- window.storage only exists inside Claude.ai's artifact
+// viewer. If this file is opened standalone (a local server, a downloaded
+// file, etc. -- e.g. a "localhost" URL), window.storage is undefined and
+// every save would throw. Fall back to an in-memory store so the app still
+// works for the session, with one clear warning instead of a silent failure
+// or a dead-end error on every single trade.
+// ----------------------------------------------------------------------------
+let storageWarningShown = false;
+const memoryStorageFallback = {};
+
+function hasRealStorage(){
+  return typeof window !== "undefined" && window.storage && typeof window.storage.get === "function";
+}
+
+function warnAboutFallbackStorageOnce(){
+  if (storageWarningShown) return;
+  storageWarningShown = true;
+  showError("Persistent storage isn't available in this environment (this usually means the app is running outside Claude.ai's artifact viewer). Your journal will still work for this session, but won't be saved if you reload the page.");
+}
+
+async function storageGet(key){
+  if (hasRealStorage()){
+    try { return await window.storage.get(key); }
+    catch(e){ console.error("window.storage.get failed:", e); }
+  }
+  warnAboutFallbackStorageOnce();
+  return key in memoryStorageFallback ? { key, value: memoryStorageFallback[key] } : null;
+}
+
+async function storageSet(key, value){
+  if (hasRealStorage()){
+    try {
+      const result = await window.storage.set(key, value);
+      if (result) return result;
+      console.error("window.storage.set returned no result -- falling back to memory for this save.");
+    } catch(e){ console.error("window.storage.set failed:", e); }
+  }
+  warnAboutFallbackStorageOnce();
+  memoryStorageFallback[key] = value;
+  return { key, value };
+}
+
+async function loadJournal(){
+  try{
+    const res = await storageGet("journal_entries");
+    return res ? JSON.parse(res.value) : [];
+  } catch(e){ console.error("loadJournal failed:", e); return []; }
+}
+async function saveJournal(entries){
+  const result = await storageSet("journal_entries", JSON.stringify(entries));
+  if (!result) throw new Error("Storage write returned no result even from the in-memory fallback -- this shouldn't happen.");
+}
+
+function formatDuration(openedMs, closedMs){
+  if (!closedMs) return "—";
+  const mins = Math.round((closedMs-openedMs)/60000);
+  if (mins < 60) return `${mins}m`;
+  if (mins < 1440) return `${(mins/60).toFixed(1)}h`;
+  return `${(mins/1440).toFixed(1)}d`;
+}
+
+async function renderJournal(){
+  const entries = await loadJournal();
+  const body = document.getElementById("journalBody");
+  const empty = document.getElementById("journalEmpty");
+  if(!entries.length){ body.innerHTML=""; empty.style.display="block"; }
+  else {
+    empty.style.display="none";
+    body.innerHTML = entries.slice().reverse().map(e=>{
+      const pill = e.outcome==="open" ? '<span class="tag-pill open">OPEN</span>' :
+                   e.outcome==="win" ? '<span class="tag-pill win">WIN</span>' : '<span class="tag-pill loss">LOSS</span>';
+      const closeBtns = e.outcome==="open" ? `
+        <button class="ghost action small" onclick="closeTrade('${e.id}','win')">Win</button>
+        <button class="ghost action small" onclick="closeTrade('${e.id}','loss')">Loss</button>` : "";
+      const duration = e.outcome==="open" ? formatDuration(e.opened, Date.now()) : formatDuration(e.opened, e.closed);
+      return `<tr>
+        <td class="mono">${new Date(e.opened).toLocaleDateString()}</td>
+        <td>${e.pair}</td><td class="mono">${e.direction}</td><td>${e.strategy||"—"}</td>
+        <td class="mono">${fmt(e.entry)}</td><td class="mono">${fmt(e.stop)}</td>
+        <td class="mono">${e.outcome==="open"?"—":(e.r!==undefined?e.r+"R":"—")}</td>
+        <td class="mono">${duration}</td><td>${pill}</td><td>${e.outcome==="open" ? closeBtns : ""}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  const closed = entries.filter(e=>e.outcome!=="open");
+  const wins = closed.filter(e=>e.outcome==="win");
+  const winRate = closed.length ? (wins.length/closed.length*100).toFixed(1) : "—";
+  const avgR = closed.length ? (closed.reduce((s,e)=>s+(e.r||0),0)/closed.length).toFixed(2) : "—";
+  document.getElementById("journalStats").innerHTML = `
+    <div class="stat"><div class="k">Open trades</div><div class="v">${entries.filter(e=>e.outcome==="open").length}</div></div>
+    <div class="stat"><div class="k">Closed trades</div><div class="v">${closed.length}</div></div>
+    <div class="stat"><div class="k">Win rate</div><div class="v" style="color:var(--brass)">${winRate}${closed.length?"%":""}</div></div>
+    <div class="stat"><div class="k">Average R</div><div class="v">${avgR}</div></div>
+  `;
+  refreshTrackedPairsFromEntries(entries);
+  renderLiveMonitor(entries.filter(e=>e.outcome==="open"));
+}
+
+window.closeTrade = async function(id, outcome){
+  try {
+    const entries = await loadJournal();
+    const entry = entries.find(e=>e.id===id);
+    if(!entry){ alert("Couldn't find that trade — it may have already been removed."); return; }
+    entry.outcome = outcome; entry.closed = Date.now();
+    const risk = Math.abs(entry.entry-entry.stop);
+    if(outcome==="win"){
+      const target = entry.target || (entry.direction==="BUY" ? entry.entry+risk*2 : entry.entry-risk*2);
+      const reward = entry.direction==="BUY" ? target-entry.entry : entry.entry-target;
+      entry.r = risk ? Math.round((reward/risk)*100)/100 : 0;
+    } else { entry.r = -1; }
+    await saveJournal(entries);
+    await renderJournal();
+  } catch (err) {
+    console.error("Failed to close trade:", err);
+    alert("Couldn't update this trade right now. Nothing was changed — try again.");
+  }
+};
+
+document.getElementById("addJournalBtn").onclick = async ()=>{
+  const entryPrice = parseFloat(document.getElementById("jEntry").value);
+  const stopPrice = parseFloat(document.getElementById("jStop").value);
+  const targetPrice = parseFloat(document.getElementById("jTarget").value);
+  const direction = document.getElementById("jDirection").value;
+
+  const errors = [];
+  if (isNaN(entryPrice)) errors.push("Entry price is required.");
+  if (isNaN(stopPrice)) errors.push("Stop price is required.");
+  if (!isNaN(entryPrice) && !isNaN(stopPrice) && entryPrice === stopPrice) errors.push("Entry and stop can't be the same price.");
+  if (!isNaN(entryPrice) && !isNaN(stopPrice)){
+    if (direction === "BUY" && stopPrice >= entryPrice) errors.push("For a BUY, the stop should be below the entry.");
+    if (direction === "SELL" && stopPrice <= entryPrice) errors.push("For a SELL, the stop should be above the entry.");
+  }
+  if (errors.length){ alert(errors.join("\n")); return; }
+
+  const entry = {
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    opened: Date.now(), closed: null,
+    pair: state.pair, market: state.market, direction, entry: entryPrice, stop: stopPrice,
+    target: isNaN(targetPrice) ? null : targetPrice,
+    strategy: document.getElementById("jStrategy").value.trim() || "manual",
+    notes: document.getElementById("jNotes").value.trim(),
+    screenshot: null, // placeholder field, per brief -- no file storage available in this artifact
+    outcome: "open",
+  };
+
+  try {
+    const entries = await loadJournal();
+    entries.push(entry);
+    await saveJournal(entries);
+    await renderJournal();
+    ["jEntry","jStop","jTarget","jStrategy","jNotes"].forEach(id=>document.getElementById(id).value="");
+  } catch (err) {
+    console.error("Failed to save journal entry:", err);
+    alert("Couldn't save this trade to your journal. Try clicking Log trade again.");
+  }
+};
+
+// ----------------------------------------------------------------------------
+// LIVE TRADE MONITOR -- floating P/L for open journal trades against the
+// current price of whichever pair is on screen (only pair we have a live
+// price for at any moment, since that's all this single-pair scan fetches).
+// ----------------------------------------------------------------------------
+function renderPendingSetups(signals){
+  const el = document.getElementById("pendingSetupsList");
+  if (!el) return;
+  const pending = (signals || []).filter(s => s.isPending);
+  if (!pending.length){ el.innerHTML = `<div class="empty">No pending setups on ${state.pair} right now.</div>`; return; }
+
+  el.innerHTML = pending.map(s => {
+    const dirClass = s.pendingDirection === "BUY" ? "buy" : "sell";
+    const distance = (s.entry!=null && state.candles.H1) ?
+      Math.abs(state.candles.H1[state.candles.H1.length-1].close - s.entry) : null;
+    return `<div class="signal-card ${dirClass}" style="opacity:0.85;">
+      <div class="signal-top">
+        <div><span class="signal-dir ${dirClass}">${s.pendingDirection} (pending)</span> <span class="strategy-name">· ${s.strategy}</span></div>
+      </div>
+      <div class="reason">${s.reason}</div>
+      <div class="levels">
+        <div class="level"><div class="k">If triggered: Entry</div><div class="v mono">${fmt(s.entry)}</div></div>
+        <div class="level"><div class="k">Stop</div><div class="v mono">${fmt(s.stop)}</div></div>
+        <div class="level"><div class="k">Target</div><div class="v mono">${fmt(s.tp1)}</div></div>
+        <div class="level"><div class="k">R:R</div><div class="v mono">${s.rr ?? "—"}</div></div>
+      </div>
+      ${distance!=null ? `<div style="font-size:11px; color:var(--muted-2); margin-top:8px;">${fmt(distance)} away from current price</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// ============================================================================
+// MARKET SCANNER -- runs the full pipeline (data -> 10 strategies -> backtest
+// -> grading) across every pair in the current market at once, instead of
+// checking pairs one at a time. Deliberately manual-trigger only (a button,
+// not the 25s auto-refresh) -- scanning 7+ pairs simultaneously on a timer
+// would be excessive load for something you're not actively looking at.
+//
+// Uses its own LOCAL copy of the hero-pick logic rather than the shared
+// pickHeroSignal()/state.backtestResults, since those represent only the
+// currently-displayed pair -- scanning other pairs must never overwrite them.
+// ============================================================================
+async function scanSinglePairForScanner(market, pair){
+  try {
+    const candles = market === "crypto" ? await loadCryptoData(pair) : await loadSyntheticData(pair);
+    if (!candles || !candles.H1 || !candles.H1.length) return { pair, error: "no data", best: null };
+
+    let signals = runEngine(candles);
+    const backtest = runAllBacktests(candles);
+    signals = applyBacktestToGrading(signals, backtest);
+
+    const actionable = signals.filter(s => s.direction!=="WAIT" && !s.isError);
+    const meetsBar = actionable.filter(s => (parseFloat(s.rr)||0) >= state.minRR);
+    const losing = meetsBar.filter(s => {
+      const bt = backtest[s.strategy];
+      return bt && bt.total >= MIN_BACKTEST_SAMPLE && bt.winRate < BACKTEST_WINRATE_WARNING_THRESHOLD;
+    });
+    const eligible = meetsBar.filter(s => !losing.includes(s));
+    const best = eligible.length ? eligible.reduce((b,s)=> s.confidence>b.confidence?s:b, eligible[0]) : null;
+
+    return { pair, error: null, best, totalSignals: signals.length };
+  } catch(err){
+    console.error(`Scanner failed for ${market}:${pair}:`, err);
+    return { pair, error: err.message, best: null };
+  }
+}
+
+async function runMarketScan(){
+  if (state.scannerRunning) return;
+  state.scannerRunning = true;
+  state.scannerResults = {};
+  renderScannerResults();
+
+  const market = state.scannerMarket;
+  const statusEl = document.getElementById("scannerStatus");
+
+  if (state.backendConnected){
+    try{
+      if (statusEl) statusEl.textContent = "Reading the backend's continuous scan results...";
+      const { pairs, lastScanAt, isStale } = await fetchBackendMarketSignals(market);
+      const gradeRank = { Aplus: 3, A: 2, B: 1 };
+      Object.entries(pairs).forEach(([pair, signals]) => {
+        const actionable = signals.filter(s => s.direction !== "WAIT" && !s.isError);
+        const meetsBar = actionable.filter(s => (parseFloat(s.rr)||0) >= state.minRR);
+        const best = meetsBar.length ? meetsBar.reduce((b,s)=> (gradeRank[s.grade]||0)*1000+s.confidence > (gradeRank[b.grade]||0)*1000+b.confidence ? s : b, meetsBar[0]) : null;
+        state.scannerResults[pair] = { pair, error: null, best, totalSignals: signals.length };
+      });
+      if (isStale) showInfo("Backend hasn't completed its first scan cycle yet — results may be incomplete.");
+      state.scannerRunning = false;
+      state.scannerLastRun = lastScanAt ? new Date(lastScanAt).getTime() : Date.now();
+      renderScannerResults();
+      return;
+    } catch(err){
+      console.error("Backend scanner fetch failed, falling back to client-side scan:", err);
+      showInfo("Backend unreachable for the scanner — running the scan locally instead.");
+      setTimeout(clearInfo, 4000);
+      // falls through to the client-side path below
+    }
+  }
+
+  let pairs = MARKETS[market].pairs;
+  if (market === "synthetic" && !pairs.length){
+    try { pairs = await loadSyntheticSymbolList(); }
+    catch(err){ showError("Couldn't load the Deriv symbol list to scan."); state.scannerRunning = false; renderScannerResults(); return; }
+  }
+
+  if (statusEl) statusEl.textContent = `Scanning ${pairs.length} pairs...`;
+
+  const results = await Promise.all(pairs.map(p => scanSinglePairForScanner(market, p)));
+  results.forEach(r => { state.scannerResults[r.pair] = r; });
+
+  state.scannerRunning = false;
+  state.scannerLastRun = Date.now();
+  renderScannerResults();
+}
+
+function renderScannerResults(){
+  const table = document.getElementById("scannerTable");
+  const body = document.getElementById("scannerBody");
+  const empty = document.getElementById("scannerEmpty");
+  const noMatch = document.getElementById("scannerNoMatch");
+  const statusEl = document.getElementById("scannerStatus");
+  if (!table || !body || !empty) return;
+
+  const results = Object.values(state.scannerResults);
+
+  if (state.scannerRunning){
+    table.style.display = "none";
+    empty.style.display = "block";
+    noMatch.style.display = "none";
+    empty.textContent = "Scanning...";
+    if (statusEl) statusEl.textContent = "";
+    return;
+  }
+  if (!results.length){
+    table.style.display = "none";
+    empty.style.display = "block";
+    noMatch.style.display = "none";
+    empty.textContent = 'Tap "Scan all pairs" to check every pair in this market at once instead of clicking through them one by one.';
+    if (statusEl) statusEl.textContent = "";
+    return;
+  }
+
+  // --- Filtering ---
+  const gradeRank = { Aplus: 3, A: 2, B: 1 };
+  const minGradeRank = state.scannerGradeFilter === "all" ? 0 : gradeRank[state.scannerGradeFilter];
+  let filtered = results.filter(r => {
+    if (r.error) return true; // always show failed scans, regardless of filters
+    if (state.scannerHideWait && !r.best) return false;
+    if (!r.best) return !state.scannerHideWait; // WAIT rows pass direction/grade filters trivially unless hidden
+    if (state.scannerDirFilter !== "all" && r.best.direction !== state.scannerDirFilter) return false;
+    if ((gradeRank[r.best.grade]||0) < minGradeRank) return false;
+    return true;
+  });
+
+  if (!filtered.length){
+    table.style.display = "none";
+    empty.style.display = "none";
+    noMatch.style.display = "block";
+    if (statusEl) statusEl.textContent = "";
+    return;
+  }
+
+  // --- Sorting ---
+  const sortBy = state.scannerSortBy;
+  const sorted = filtered.slice().sort((a,b) => {
+    if (a.error && !b.error) return 1;
+    if (!a.error && b.error) return -1;
+    if (a.error && b.error) return a.pair.localeCompare(b.pair);
+
+    if (sortBy === "pair") return a.pair.localeCompare(b.pair);
+    if (sortBy === "confidence"){
+      const av = a.best ? a.best.confidence : -1, bv = b.best ? b.best.confidence : -1;
+      return bv - av;
+    }
+    if (sortBy === "rr"){
+      const av = a.best ? (parseFloat(a.best.rr)||0) : -1, bv = b.best ? (parseFloat(b.best.rr)||0) : -1;
+      return bv - av;
+    }
+    // default: grade
+    const aScore = a.best ? (gradeRank[a.best.grade]||0)*1000 + a.best.confidence : -1;
+    const bScore = b.best ? (gradeRank[b.best.grade]||0)*1000 + b.best.confidence : -1;
+    return bScore - aScore;
+  });
+
+  table.style.display = "table";
+  empty.style.display = "none";
+  noMatch.style.display = "none";
+  body.innerHTML = sorted.map(r => {
+    if (r.error){
+      return `<tr><td>${r.pair}</td><td colspan="4" style="color:var(--sell); font-size:11.5px;">Scan failed: ${r.error}</td>
+        <td><button class="ghost action small" data-pair="${r.pair}">View</button></td></tr>`;
+    }
+    if (!r.best){
+      return `<tr><td>${r.pair}</td><td class="mono" style="color:var(--muted);">WAIT</td><td>—</td><td>—</td><td>—</td>
+        <td><button class="ghost action small" data-pair="${r.pair}">View</button></td></tr>`;
+    }
+    const s = r.best;
+    const dirClass = s.direction === "BUY" ? "buy" : "sell";
+    return `<tr>
+      <td>${r.pair}</td>
+      <td class="mono" style="color:var(--${dirClass});">${s.direction}</td>
+      <td><span class="grade-badge ${s.grade}">${s.gradeLabel}</span></td>
+      <td class="mono">${s.confidence}%</td>
+      <td class="mono">${s.rr}:1</td>
+      <td><button class="ghost action small" data-pair="${r.pair}">View</button></td>
+    </tr>`;
+  }).join("");
+
+  body.querySelectorAll("button[data-pair]").forEach(btn => {
+    btn.onclick = () => {
+      state.pair = btn.dataset.pair;
+      state.chartOffset = 0;
+      buildPairSelect();
+      scanCurrentPair();
+    };
+  });
+
+  if (statusEl){
+    const hitCount = results.filter(r=>r.best).length;
+    const shownNote = filtered.length !== results.length ? ` (${filtered.length} shown after filters)` : "";
+    statusEl.textContent = state.scannerLastRun
+      ? `Last scanned ${new Date(state.scannerLastRun).toLocaleTimeString()} · ${hitCount} pair${hitCount===1?"":"s"} with a live signal${shownNote}`
+      : "";
+  }
+}
+
+function renderLiveMonitor(openTrades){
+  const el = document.getElementById("liveMonitorList");
+  if(!openTrades.length){ el.innerHTML = '<div class="empty">No open trades. Log one from the journal below.</div>'; return; }
+  const currentPrice = state.candles.H1 ? state.candles.H1[state.candles.H1.length-1].close : null;
+
+  el.innerHTML = openTrades.map(t=>{
+    const market = t.market || "unknown";
+    const isCurrentPair = t.pair === state.pair && market === state.market;
+    const trackedKey = `${market}:${t.pair}`;
+    const price = isCurrentPair ? currentPrice : (state.trackedPrices[trackedKey] ?? null);
+    let plText = "— (waiting for next background price update)";
+    let plClass = "wait";
+    if (price !== null){
+      const risk = Math.abs(t.entry - t.stop);
+      const floating = t.direction==="BUY" ? price - t.entry : t.entry - price;
+      const rMultiple = risk ? (floating/risk).toFixed(2) : "0.00";
+      plClass = floating >= 0 ? "buy" : "sell";
+      plText = `${floating>=0?"+":""}${rMultiple}R (${fmt(floating)})${isCurrentPair?"":" · background"}`;
+    }
+    return `<div class="signal-card ${plClass}">
+      <div class="signal-top">
+        <div><span class="signal-dir ${plClass}">${t.direction}</span> <span class="strategy-name">· ${t.pair} · ${t.strategy}</span></div>
+        <div class="confidence mono">${plText}</div>
+      </div>
+      <div class="levels">
+        <div class="level"><div class="k">Entry</div><div class="v mono">${fmt(t.entry)}</div></div>
+        <div class="level"><div class="k">Stop</div><div class="v mono">${fmt(t.stop)}</div></div>
+        <div class="level"><div class="k">Target</div><div class="v mono">${fmt(t.target)}</div></div>
+        <div class="level"><div class="k">Duration</div><div class="v mono">${formatDuration(t.opened, Date.now())}</div></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ----------------------------------------------------------------------------
+// EXPORT: CSV (native) and XLSX (via SheetJS, loaded from cdnjs)
+// ----------------------------------------------------------------------------
+function journalToRows(entries){
+  return entries.map(e => ({
+    Opened: new Date(e.opened).toISOString(),
+    Closed: e.closed ? new Date(e.closed).toISOString() : "",
+    Pair: e.pair, Direction: e.direction, Strategy: e.strategy,
+    Entry: e.entry, Stop: e.stop, Target: e.target ?? "",
+    "R Multiple": e.r ?? "", Outcome: e.outcome,
+    Duration: e.closed ? formatDuration(e.opened, e.closed) : formatDuration(e.opened, Date.now()),
+    Notes: e.notes || "", Screenshot: e.screenshot || "(none)",
+  }));
+}
+
+document.getElementById("exportCsvBtn").onclick = async ()=>{
+  const entries = await loadJournal();
+  if (!entries.length){ alert("No journal entries to export yet."); return; }
+  const rows = journalToRows(entries);
+  const headers = Object.keys(rows[0]);
+  const csv = [headers.join(",")].concat(
+    rows.map(r => headers.map(h => `"${String(r[h]).replace(/"/g,'""')}"`).join(","))
+  ).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `orderflow_journal_${Date.now()}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+};
+
+document.getElementById("exportXlsxBtn").onclick = async ()=>{
+  const entries = await loadJournal();
+  if (!entries.length){ alert("No journal entries to export yet."); return; }
+  if (typeof XLSX === "undefined"){ alert("Excel export library didn't load — try CSV export instead, or refresh and try again."); return; }
+  try{
+    const rows = journalToRows(entries);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Journal");
+    XLSX.writeFile(wb, `orderflow_journal_${Date.now()}.xlsx`);
+  } catch(err){
+    console.error("XLSX export failed:", err);
+    alert("Excel export failed. Try CSV export instead.");
+  }
+};
+</script>
+<script>
+// ============================================================================
+// ALERTS -- browser notifications, sound, Telegram, Discord. Only fires for
+// A+ graded signals, per your request. All credentials/URLs stay in this
+// browser only (nothing is sent anywhere except directly from your browser
+// to Telegram's/Discord's own APIs, using the token/webhook YOU supply).
+// ============================================================================
+let lastAlertedSignal = null; // avoid re-alerting the same signal every refresh
+
+function playAlertSound(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine"; osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.4);
+  } catch(err){ console.error("Sound alert failed:", err); }
+}
+
+function sendBrowserNotification(signal){
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  try{
+    new Notification(`A+ Signal: ${state.pair} ${signal.direction}`, {
+      body: `${signal.strategy.replace(/_/g," ")} · ${signal.confidence}% confidence · ${signal.rr}:1 R:R`,
+    });
+  } catch(err){ console.error("Browser notification failed:", err); }
+}
+
+async function sendTelegramAlert(signal){
+  const token = document.getElementById("tgToken").value.trim();
+  const chatId = document.getElementById("tgChatId").value.trim();
+  if (!token || !chatId) return;
+  const text = `*A+ Signal* — ${state.pair}\n${signal.direction} via ${signal.strategy.replace(/_/g," ")}\nConfidence: ${signal.confidence}% · R:R ${signal.rr}:1\nEntry: ${fmt(signal.entry)} · Stop: ${fmt(signal.stop)}\n${signal.reason}`;
+  try{
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+    });
+  } catch(err){ console.error("Telegram alert failed:", err); showError("Telegram alert failed to send — check your bot token and chat ID in Settings."); }
+}
+
+async function sendDiscordAlert(signal){
+  const webhook = document.getElementById("discordWebhook").value.trim();
+  if (!webhook) return;
+  const content = `**A+ Signal — ${state.pair}**\n${signal.direction} via ${signal.strategy.replace(/_/g," ")}\nConfidence: ${signal.confidence}% · R:R ${signal.rr}:1\nEntry: ${fmt(signal.entry)} · Stop: ${fmt(signal.stop)}\n${signal.reason}`;
+  try{
+    await fetch(webhook, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ content }),
+    });
+  } catch(err){ console.error("Discord alert failed:", err); showError("Discord alert failed to send — check your webhook URL in Settings."); }
+}
+
+function maybeFireAlert(signal){
+  const signature = `${state.pair}|${signal.strategy}|${signal.direction}|${fmt(signal.entry)}`;
+  if (signature === lastAlertedSignal) return; // don't spam the same signal every refresh
+  lastAlertedSignal = signature;
+
+  if (document.getElementById("soundToggle").checked) playAlertSound();
+  if (document.getElementById("browserNotifToggle").checked) sendBrowserNotification(signal);
+  sendTelegramAlert(signal);
+  sendDiscordAlert(signal);
+}
+</script>
+<script>
+// ============================================================================
+// AUTO-TRADING CONFIGURATION (UI ONLY -- see panel copy for why this can't
+// execute real trades from a browser artifact). No credentials are sent
+// anywhere; nothing here calls out to a broker.
+// ============================================================================
+document.getElementById("autoTradeMaster").onchange = (e)=>{
+  const status = document.getElementById("autoTradeStatus");
+  if (e.target.checked){
+    status.textContent = "ON — would execute qualifying A+ signals automatically (requires backend deployment to actually place trades)";
+    status.style.color = "var(--brass)";
+  } else {
+    status.textContent = "OFF — signal mode only";
+    status.style.color = "var(--muted)";
+  }
+};
+
+document.getElementById("brokerConnectBtn").onclick = ()=>{
+  const broker = document.getElementById("brokerSelect").value;
+  const server = document.getElementById("brokerServer").value.trim();
+  const login = document.getElementById("brokerLogin").value.trim();
+  const token = document.getElementById("brokerToken").value.trim();
+  const statusEl = document.getElementById("brokerConnStatus");
+
+  if (!server || !login || !token){
+    statusEl.textContent = "Fill in server, login, and token first.";
+    statusEl.style.color = "var(--sell)";
+    return;
+  }
+  statusEl.textContent = `Configuration saved for ${broker} (${login}@${server}). Real connection requires the backend service — see note.`;
+  statusEl.style.color = "var(--muted-2)";
+};
+
+// ============================================================================
+// RISK / POSITION SIZE CALCULATOR
+// ============================================================================
+document.getElementById("calcBtn").onclick = ()=>{
+  const resultEl = document.getElementById("riskResult");
+  const balance = parseFloat(document.getElementById("riskBalance").value);
+  const pct = parseFloat(document.getElementById("riskPct").value);
+  const pips = parseFloat(document.getElementById("riskPips").value);
+
+  const errors = [];
+  if (isNaN(balance) || balance <= 0) errors.push("Account balance must be a number greater than 0.");
+  if (isNaN(pct) || pct <= 0) errors.push("Risk % must be a number greater than 0.");
+  if (isNaN(pips) || pips <= 0) errors.push("Stop distance (pips) must be a number greater than 0.");
+  if (pct > 10) errors.push("Risk % above 10 is unusually high — every strategy source in the reference doc recommends 1–2% per trade.");
+
+  if (errors.length){
+    resultEl.innerHTML = `<div style="color:var(--sell); font-size:12.5px; line-height:1.6;">${errors.join("<br>")}</div>`;
+    return;
+  }
+  const riskAmount = balance*(pct/100);
+  const pipValue = riskAmount/pips;
+  resultEl.innerHTML = `
+    <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border);"><span>Risk amount</span><span class="mono" style="color:var(--brass)">$${riskAmount.toFixed(2)}</span></div>
+    <div style="display:flex; justify-content:space-between; padding:6px 0;"><span>Value per pip</span><span class="mono">$${pipValue.toFixed(2)}</span></div>
+    <div style="font-size:11px; color:var(--muted-2); margin-top:8px;">risk_amount = (risk_% ÷ 100) × balance; pip_value = risk_amount ÷ stop_loss_pips. Convert to lot size using your broker's contract specs.</div>
+  `;
+};
+
+// ============================================================================
+// SETTINGS DRAWER
+// ============================================================================
+document.getElementById("settingsToggle").onclick = ()=>{
+  document.getElementById("settingsDrawer").classList.toggle("open");
+};
+document.getElementById("themeToggle").onclick = ()=>{
+  applyTheme(state.theme === "dark" ? "light" : "dark");
+};
+document.getElementById("minRrSelect").onchange = (e)=>{
+  const customInput = document.getElementById("customRr");
+  if (e.target.value === "custom"){ customInput.style.display = "block"; return; }
+  customInput.style.display = "none";
+  state.minRR = parseFloat(e.target.value);
+  renderHero(state.signals);
+  drawChart();
+};
+document.getElementById("customRr").oninput = (e)=>{
+  const v = parseFloat(e.target.value);
+  if (!isNaN(v) && v > 0){ state.minRR = v; renderHero(state.signals); drawChart(); }
+};
+document.getElementById("browserNotifToggle").onchange = (e)=>{
+  if (e.target.checked && "Notification" in window && Notification.permission !== "granted"){
+    Notification.requestPermission().then(perm=>{
+      if (perm !== "granted"){ e.target.checked = false; alert("Browser notifications were blocked. You can still use sound, Telegram, or Discord alerts."); }
+    });
+  }
+};
+</script>
+<script>
+// ============================================================================
+// MAIN SCAN ORCHESTRATION
+// ============================================================================
+async function scanCurrentPair(){
+  try {
+    clearError();
+    if (!state.pair){ return; }
+
+    const candles = await loadDataForCurrentPair();
+
+    if (!candles){
+      // Genuinely no data source for this pair right now -- not an error,
+      // just nothing to show. Clear any stale state from a previous pair
+      // rather than leaving old candles/signals on screen.
+      state.candles = {}; state.signals = []; state.backtestResults = {};
+      document.getElementById("lastPrice").textContent = "—";
+      document.getElementById("lastDelta").textContent = "—";
+      document.getElementById("lastDelta").className = "delta mono";
+      document.getElementById("spreadDisplay").textContent = "—";
+      renderNoDataState();
+      renderSignals();
+      renderPendingSetups([]);
+      buildStrategyToggles();
+      buildChartOverlayChips();
+      drawChart();
+      await renderJournal();
+      return;
+    }
+
+    state.candles = candles;
+    if (!state.candles.H1 || !state.candles.H1.length){
+      throw new Error("Data came back but was empty for this pair.");
+    }
+
+    let usedBackend = false;
+    if (state.backendConnected){
+      try{
+        const backendResult = await fetchBackendSignals(state.market, state.pair);
+        state.signals = backendResult.signals;
+        state.backtestResults = backendResult.backtestResults;
+        usedBackend = true;
+      } catch(err){
+        console.error("Backend signal fetch failed, falling back to client-side computation:", err);
+        showInfo("Backend unreachable for this scan — computed locally instead.");
+        setTimeout(clearInfo, 4000);
+      }
+    }
+    if (!usedBackend){
+      state.signals = runEngine(state.candles);
+      state.backtestResults = runAllBacktests(state.candles);
+      state.signals = applyBacktestToGrading(state.signals, state.backtestResults);
+    }
+
+    const h1 = state.candles.H1;
+    const last = h1[h1.length-1], prevDay = h1[Math.max(0,h1.length-24)];
+    document.getElementById("lastPrice").textContent = fmt(last.close);
+    const delta = last.close - prevDay.close;
+    const deltaEl = document.getElementById("lastDelta");
+    deltaEl.textContent = (delta>=0?"+":"")+fmt(delta);
+    deltaEl.className = "delta mono " + (delta>=0?"up":"down");
+
+    // Spread: real bid/ask isn't available from candle-close data alone;
+    // show a clearly-labeled estimate from recent range rather than fabricate
+    // a precise bid/ask we don't actually have.
+    const estSpread = avgRange(h1.slice(-20)) * 0.02;
+    document.getElementById("spreadDisplay").textContent = `~${fmt(estSpread)} (est.)`;
+
+    renderHero(state.signals);
+    renderSignals();
+    renderPendingSetups(state.signals);
+    buildStrategyToggles();
+    buildChartOverlayChips();
+    drawChart();
+    await renderJournal();
+
+    const errorCount = state.signals.filter(s=>s.isError).length;
+    if (errorCount > 0){
+      showError(`${errorCount} of ${state.signals.length} strategies hit an error this scan and were skipped — the rest are showing normally.`);
+    }
+
+  } catch (err) {
+    console.error("scanCurrentPair failed:", err);
+    showError(`Couldn't load data for ${state.pair}: ${err.message}. Try again in a few seconds, or pick a different pair.`);
+    document.getElementById("heroSignal").innerHTML = `<div class="hero"><div class="hero-badge wait">—</div><div class="hero-detail">
+      <div class="strat">Scan failed</div>
+      <div class="reason">Something went wrong loading this pair's data. Your journal is untouched. Try again shortly.</div>
+    </div></div>`;
+  }
+}
+
+function renderNoDataState(){
+  const hero = document.getElementById("heroSignal");
+  hero.innerHTML = `<div class="hero"><div class="hero-badge wait">—</div><div class="hero-detail">
+    <div class="strat">No live data for ${state.pair}</div>
+    <div class="reason">Nothing came back for this pair right now. Both Crypto and Synthetic normally return data with zero setup, so this is likely a temporary connection hiccup — try again shortly.</div>
+  </div></div>`;
+}
+
+let liveInterval = null;
+function startLiveUpdates(){
+  if(liveInterval) clearInterval(liveInterval);
+  liveInterval = setInterval(scanCurrentPair, 25000);
+}
+
+// ============================================================================
+// FOOTER
+// ============================================================================
+document.getElementById("footerNotes").innerHTML = `
+  <strong>Two markets, both fully real, zero setup.</strong> Crypto is live from Binance's public API. Synthetic
+  Indices are live from Deriv's public WebSocket, with the pair list pulled directly from Deriv's own symbol registry.
+  No demo or generated data anywhere in this app — every candle, every signal, every backtest result comes from a real
+  feed or it doesn't show at all. Forex and Gold were removed since they needed a separate API key to show real data
+  rather than working out of the box like these two.<br><br>
+  <strong>Market Scanner</strong> runs the full pipeline — data, all 10 strategies, backtest validation, grading —
+  across every pair in the current market at once, so you don't have to click through them one by one. It's a manual
+  "Scan all pairs" button rather than something on the auto-refresh timer, since scanning 7+ pairs simultaneously every
+  25 seconds would be excessive load for pairs you're not actively looking at.<br><br>
+  <strong>What isn't real yet:</strong> Auto-Trading is a configuration surface, not a live connection — no trade this app
+  shows can execute against a real broker account from inside a browser tab. Bid/ask spread is estimated from recent
+  candle range, not a true live order-book spread. Economic calendar and news filters aren't included — they need
+  another paid data source.<br><br>
+  <strong>Entered trades</strong> keep tracking in the background (polled every ~20s) even while you browse other pairs
+  looking for new signals, using a real polled price the whole time.<br><br>
+  <strong>Backtest validation:</strong> every scan replays each strategy's own rules against this pair's real recent
+  candle history bar-by-bar (no lookahead) and checks whether each past signal would have hit its stop or target first.
+  A strategy with a proven losing record here (5+ completed trades, under 40% wins) is excluded from the headline pick
+  and caps its grade, even if it has the highest raw confidence.<br><br>
+  <strong>10 strategies</strong>, including Malaysian SNR — a support/resistance methodology that reads a close-price
+  line chart (not wicks) for "fresh" vs. "unfresh" levels, trading only with the higher-timeframe storyline. Every
+  active strategy's entry/stop/target can be shown directly on the chart — solid for live signals, dotted for possible
+  entries that haven't triggered yet — tap the chips above the chart to show or hide each one.<br><br>
+  <strong>This can't run while you're not looking</strong> — no browser tab can, once it's backgrounded or the phone's
+  screen locks; that's a browser limitation, not something any client-side code can fix. What it does do: the instant
+  you come back, it immediately re-scans and re-polls tracked trades instead of waiting for the next scheduled tick, so
+  you're never looking at data that's stale by more than the time you were away. Real always-on scanning needs a server
+  process running independently of any browser — the Python backend from earlier is built for exactly that.<br><br>
+  Journal entries and settings persist to this artifact's storage and are only visible to you. Alerts (Telegram/Discord/
+  browser/sound) only fire for A+ graded signals and send directly from your browser using credentials you provide —
+  nothing passes through us.
+`;
+
+// ============================================================================
+// INIT
+// ============================================================================
+buildTabs();
+buildPairSelect();
+buildStrategyToggles();
+buildChartTfTabs();
+buildChartOverlayChips();
+setupChartInteraction();
+document.getElementById("backendConnectBtn").onclick = () => {
+  const url = document.getElementById("backendUrlInput").value.trim();
+  connectToBackend(url);
+};
+
+// ----------------------------------------------------------------------------
+// AUTO-DETECT: if this HTML is being served BY an ORDERFLOW backend (i.e.
+// you deployed the backend and are viewing it at its own URL, rather than
+// opening this file standalone as a Claude artifact or from disk), silently
+// check whether the page's own origin is a live backend and connect
+// automatically -- no manual URL entry needed. If this file is running
+// anywhere else, that same-origin health check simply fails (no matching
+// backend there) and the tool proceeds exactly as it always has, fully
+// self-sufficient. This never blocks initial rendering -- it's a
+// best-effort upgrade attempted after the page is already usable.
+// ----------------------------------------------------------------------------
+async function tryAutoDetectBackend(){
+  const origin = window.location && window.location.origin;
+  if (!origin || origin === "null" || origin.startsWith("file://")) return; // no meaningful same-origin backend possible
+  const health = await checkBackendHealth(origin);
+  if (!health) return; // not served by a backend here -- stay self-sufficient, this is the normal case for a standalone artifact
+  document.getElementById("backendUrlInput").value = origin;
+  await connectToBackend(origin);
+}
+tryAutoDetectBackend();
+refreshAutoTradeStatus();
+document.getElementById("scanAllBtn").onclick = runMarketScan;
+document.getElementById("scannerMarketSelect").value = state.scannerMarket;
+document.getElementById("scannerMarketSelect").onchange = (e)=>{
+  state.scannerMarket = e.target.value;
+  state.scannerResults = {}; state.scannerLastRun = null;
+  renderScannerResults();
+};
+document.getElementById("scannerSortSelect").onchange = (e)=>{ state.scannerSortBy = e.target.value; renderScannerResults(); };
+document.getElementById("scannerDirFilter").onchange = (e)=>{ state.scannerDirFilter = e.target.value; renderScannerResults(); };
+document.getElementById("scannerGradeFilter").onchange = (e)=>{ state.scannerGradeFilter = e.target.value; renderScannerResults(); };
+document.getElementById("scannerHideWait").onchange = (e)=>{ state.scannerHideWait = e.target.checked; renderScannerResults(); };
+applyView();
+renderScannerResults();
+applyTheme("dark");
+renderJournal();
+scanCurrentPair();
+startLiveUpdates();
+setInterval(()=>{ renderJournal(); }, 30000); // keep live monitor durations/P&L fresh even without a full rescan
+setInterval(updateTrackedPrices, 20000); // poll entered trades on OTHER pairs while you keep browsing for new signals
+updateTrackedPrices(); // kick off an immediate first poll rather than waiting 20s
+
+// ----------------------------------------------------------------------------
+// "KEEP RUNNING WHILE I'M NOT LOOKING" -- honest limits and the best real
+// mitigation available to a browser tab (not a background service):
+//
+// Browsers throttle timers HEAVILY in backgrounded tabs (often to ~once a
+// minute or less), and most mobile browsers suspend JS almost entirely once
+// the screen locks or you switch apps. Nothing running in this tab can
+// change that -- there's no client-side trick around it. If you close the
+// tab, lock your phone, or switch apps for a while, this stops running,
+// full stop. Genuinely-always-on scanning needs a real server process (the
+// Python/FastAPI backend from earlier), which keeps running whether or not
+// any browser is open at all.
+//
+// What THIS can do: the moment you come back -- unlock your phone, switch
+// back to the tab -- it immediately re-scans and re-polls instead of
+// waiting for the next scheduled tick, so you're never looking at data
+// that's stale by more than the time you were away.
+// ----------------------------------------------------------------------------
+let awayNotice = false;
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible"){
+    if (awayNotice){
+      showInfo("Welcome back — catching up on live signals and tracked trades now.");
+      setTimeout(clearInfo, 5000);
+    }
+    scanCurrentPair();
+    updateTrackedPrices();
+    awayNotice = false;
+  } else {
+    awayNotice = true;
+  }
+});
+</script>
+</body>
+</html>
